@@ -8,12 +8,12 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
-from .api.base import EchoCaveApiError
-from .api.echo_cave import EchoCaveApiClient
-from .api.qq_binding import QqBindingApiClient
-from .config import EchoCaveConfig
-from .renderer import HtmlTemplateRenderer
-from .state import AuthStateManager
+from api.base import EchoCaveApiError
+from api.echo_cave import EchoCaveApiClient
+from api.qq_binding import QqBindingApiClient
+from config import EchoCaveConfig
+from renderer import HtmlTemplateRenderer
+from state import AuthStateManager
 
 
 @register(
@@ -107,6 +107,9 @@ class EchoCavePlugin(Star):
         except EchoCaveApiError as error:
             logger.warning(f"QQ 绑定状态查询失败：{error}")
             yield event.plain_result(f"查询失败：{error}")
+        except Exception as error:
+            logger.exception(f"QQ 绑定状态处理异常：{error}")
+            yield event.plain_result("查询服务暂时不可用，请稍后再试。")
 
     async def _handle_create(self, event: AstrMessageEvent, content: str):
         """处理投稿逻辑，写操作会先检查绑定状态。"""
