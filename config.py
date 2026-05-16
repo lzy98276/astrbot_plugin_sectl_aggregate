@@ -1,8 +1,10 @@
-"""回声洞插件配置管理模块。"""
+"""回声洞插件配置管理模块。
+
+适配 AstrBot 插件配置系统，从 self.config 读取配置。
+"""
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 
@@ -17,22 +19,22 @@ class EchoCaveConfig:
     retry_count: int = 2
 
     @classmethod
-    def from_env(cls) -> "EchoCaveConfig":
-        """从环境变量读取配置，方便不同部署环境覆盖默认值。"""
-        timeout_text = os.getenv("ECHO_CAVE_TIMEOUT", "10")
-        retry_text = os.getenv("ECHO_CAVE_RETRY_COUNT", "2")
+    def from_astrbot_config(cls, astrbot_config) -> "EchoCaveConfig":
+        """从 AstrBot 插件配置系统读取配置。"""
+        timeout = astrbot_config.get("request_timeout", 10.0)
+        retry = astrbot_config.get("retry_count", 2)
+        api_base = astrbot_config.get("api_base_url", "https://appwrite.sectl.cn")
+        
         return cls(
-            api_base_url=os.getenv(
-                "ECHO_CAVE_API_BASE_URL", "https://appwrite.sectl.cn"
-            ).rstrip("/"),
-            api_token=os.getenv("ECHO_CAVE_API_TOKEN", ""),
-            internal_token=os.getenv("ECHO_CAVE_INTERNAL_TOKEN", ""),
-            request_timeout=_safe_float(timeout_text, 10.0),
-            retry_count=max(_safe_int(retry_text, 2), 0),
+            api_base_url=str(api_base).rstrip("/") if api_base else "https://appwrite.sectl.cn",
+            api_token=str(astrbot_config.get("api_token", "")),
+            internal_token=str(astrbot_config.get("internal_token", "")),
+            request_timeout=_safe_float(timeout, 10.0),
+            retry_count=max(_safe_int(retry, 2), 0),
         )
 
 
-def _safe_float(value: str, default: float) -> float:
+def _safe_float(value, default: float) -> float:
     """安全转换浮点数，避免错误配置导致插件加载失败。"""
     try:
         return float(value)
@@ -40,7 +42,7 @@ def _safe_float(value: str, default: float) -> float:
         return default
 
 
-def _safe_int(value: str, default: int) -> int:
+def _safe_int(value, default: int) -> int:
     """安全转换整数，避免错误配置导致插件加载失败。"""
     try:
         return int(value)

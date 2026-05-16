@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import aiohttp
 
 from config import EchoCaveConfig
 
@@ -34,8 +34,7 @@ class BaseApiClient:
         last_error: Exception | None = None
         for attempt in range(self.config.retry_count + 1):
             try:
-                return await asyncio.to_thread(
-                    self._sync_request,
+                return await self._async_request(
                     method,
                     path,
                     json_data,
@@ -50,7 +49,7 @@ class BaseApiClient:
                 await asyncio.sleep(0.3 * (attempt + 1))
         raise EchoCaveApiError(f"API 请求失败：{last_error}") from last_error
 
-    def _sync_request(
+    async def _async_request(
         self,
         method: str,
         path: str,
@@ -59,35 +58,34 @@ class BaseApiClient:
         token: str | None,
         extra_headers: dict[str, str] | None,
     ) -> dict[str, Any]:
-        """使用标准库同步发送 HTTP 请求，减少额外依赖。"""
-        import json
-
+        """使用 aiohttp 异步发送 HTTP 请求。"""
         url = f"{self.config.api_base_url}{path}"
-        if query:
-            clean_query = {
-                key: value for key, value in query.items() if value not in (None, "")
-            }
-            if clean_query:
-                url = f"{url}?{urlencode(clean_query)}"
-
-        body = None
+        
         headers = {"Accept": "application/json"}
         auth_token = token or self.config.api_token
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
-        if json_data is not None:
-            body = json.dumps(json_data, ensure_ascii=False).encode("utf-8")
-            headers["Content-Type"] = "application/json; charset=utf-8"
         if extra_headers:
             headers.update(extra_headers)
 
-        request = Request(url, data=body, headers=headers, method=method.upper())
-        try:
-            with urlopen(request, timeout=self.config.request_timeout) as response:
-                response_body = response.read().decode("utf-8")
+        clean_query = {}
+        if query:
+            clean_query = {
+                key: value for key, value in query.items() if value not in (None, "")
+            }
+
+        timeout = aiohttp.ClientTimeout(total=self.config.request_timeout)
+        
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.request(
+                method=method.upper(),
+                url=url,
+                params=clean_query or None,
+                json=json_data,
+                headers=headers,
+            ) as response:
+                response_body = await response.text()
                 return self._parse_response(response_body)
-        except Exception as error:
-            raise EchoCaveApiError(str(error)) from error
 
     def _parse_response(self, response_body: str) -> dict[str, Any]:
         """统一解析 JSON 响应，并兼容空响应场景。"""

@@ -1,0 +1,32 @@
+{
+  "api_base_url": {
+    "description": "回声洞 API 基础地址",
+    "type": "string",
+    "hint": "Appwrite 实例的 URL 地址",
+    "default": "https://appwrite.sectl.cn"
+  },
+  "api_token": {
+    "description": "API 认证 Token",
+    "type": "text",
+    "hint": "用于访问回声洞 API 的 Bearer Token",
+    "default": ""
+  },
+  "internal_token": {
+    "description": "内部投稿 Token",
+    "type": "text",
+    "hint": "用于内部投稿接口的 x-echo-cave-token",
+    "default": ""
+  },
+  "request_timeout": {
+    "description": "请求超时时间（秒）",
+    "type": "float",
+    "hint": "HTTP 请求的最大等待时间",
+    "default": 10.0
+  },
+  "retry_count": {
+    "description": "重试次数",
+    "type": "int",
+    "hint": "API 请求失败时的重试次数",
+    "default": 2
+  }
+}

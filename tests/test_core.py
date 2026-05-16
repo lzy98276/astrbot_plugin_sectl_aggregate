@@ -3,7 +3,7 @@
 import sys
 import types
 import unittest
-from contextlib import patch
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -39,7 +39,7 @@ class RecordingEchoCaveClient(EchoCaveApiClient):
     """记录回声洞 API 请求参数，便于验证高层客户端映射。"""
 
     def __init__(self):
-        super().__init__(EchoCaveConfig())
+        super().__init__(EchoCaveConfig.from_astrbot_config({}))
         self.calls = []
 
     async def request(
@@ -63,7 +63,7 @@ class RecordingQqBindingClient(QqBindingApiClient):
     """记录 QQ 绑定 API 请求参数，避免测试依赖真实网络。"""
 
     def __init__(self):
-        super().__init__(EchoCaveConfig())
+        super().__init__(EchoCaveConfig.from_astrbot_config({}))
         self.calls = []
 
     async def request(
@@ -124,17 +124,16 @@ class CoreLogicTest(unittest.TestCase):
         self.assertNotIn("回声洞 help", menu)
         self.assertNotIn("回声洞 绑定", menu)
 
-    def test_config_reads_environment_safely(self):
-        """校验环境变量配置可覆盖默认值，非法数值会安全降级。"""
-        env = {
-            "ECHO_CAVE_API_BASE_URL": "https://example.com/",
-            "ECHO_CAVE_API_TOKEN": "token-value",
-            "ECHO_CAVE_INTERNAL_TOKEN": "internal-value",
-            "ECHO_CAVE_TIMEOUT": "invalid",
-            "ECHO_CAVE_RETRY_COUNT": "3",
+    def test_config_reads_astrbot_config_safely(self):
+        """校验 AstrBot 配置可覆盖默认值，非法数值会安全降级。"""
+        astrbot_config = {
+            "api_base_url": "https://example.com/",
+            "api_token": "token-value",
+            "internal_token": "internal-value",
+            "request_timeout": "invalid",
+            "retry_count": 3,
         }
-        with patch.dict("os.environ", env, clear=True):
-            config = EchoCaveConfig.from_env()
+        config = EchoCaveConfig.from_astrbot_config(astrbot_config)
 
         self.assertEqual(config.api_base_url, "https://example.com")
         self.assertEqual(config.api_token, "token-value")
@@ -144,7 +143,7 @@ class CoreLogicTest(unittest.TestCase):
 
     def test_api_response_parser_handles_errors(self):
         """校验 API 响应解析能识别失败状态和非 JSON 内容。"""
-        client = BaseApiClient(EchoCaveConfig())
+        client = BaseApiClient(EchoCaveConfig.from_astrbot_config({}))
 
         self.assertEqual(client._parse_response(""), {"ok": True})
         self.assertEqual(

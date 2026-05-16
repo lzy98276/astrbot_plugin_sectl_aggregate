@@ -22,9 +22,9 @@ from state import AuthStateManager
 class EchoCavePlugin(Star):
     """回声洞 AstrBot 插件入口，负责指令路由和用户交互。"""
 
-    def __init__(self, context: Context):
-        super().__init__(context)
-        self.config = EchoCaveConfig.from_env()
+    def __init__(self, context: Context, config: dict | None = None):
+        super().__init__(context, config)
+        self.config = EchoCaveConfig.from_astrbot_config(config or {})
         self.echo_api = EchoCaveApiClient(self.config)
         self.binding_api = QqBindingApiClient(self.config)
         self.auth_state = AuthStateManager()
@@ -137,7 +137,7 @@ class EchoCavePlugin(Star):
     ):
         """优先使用 AstrBot HTML 渲染图片，失败时降级为纯文本。"""
         try:
-            image_url = await self.html_render(html_content, {}, options={"full_page": True})
+            image_url = await self.html_render(html_content, data={}, options={"full_page": True})
             return event.image_result(image_url)
         except Exception as error:
             logger.warning(f"HTML 图片结果生成失败，改用纯文本：{error}")
@@ -262,7 +262,7 @@ def _get_user_id(event: AstrMessageEvent) -> str:
         value = getattr(message_obj, attr, None)
         if value:
             return str(value)
-    return event.get_sender_name()
+    raise ValueError("无法从事件中获取用户ID")
 
 
 def _is_qq_number(value: str) -> bool:
