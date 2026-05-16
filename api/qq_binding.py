@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import BaseApiClient
+from api.base import BaseApiClient
 
 
 class QqBindingApiClient(BaseApiClient):
