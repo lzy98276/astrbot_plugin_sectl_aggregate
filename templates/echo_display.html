@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; padding: 30px; background: #eef7ff; font-family: "Microsoft YaHei", sans-serif; color: #1f2d3d; }
+    .echo { max-width: 720px; margin: auto; padding: 34px; border-radius: 28px; background: linear-gradient(145deg, #ffffff, #e8f5ff); box-shadow: 0 16px 42px rgba(43, 106, 166, .17); }
+    .tag { display: inline-block; padding: 7px 14px; border-radius: 999px; background: #dceeff; color: #216aa6; font-weight: 700; }
+    .content { margin: 24px 0; font-size: 24px; line-height: 1.72; white-space: normal; }
+    .meta { color: #617589; font-size: 15px; display: flex; gap: 18px; }
+  </style>
+</head>
+<body>
+  <article class="echo">
+    <div class="tag">回声洞 #$echo_id</div>
+    <div class="content">$content</div>
+    <div class="meta"><span>发布者：$author</span><span>时间：$created_at</span></div>
+  </article>
+</body>
+</html>
