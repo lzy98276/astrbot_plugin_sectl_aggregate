@@ -140,8 +140,15 @@ class EchoCavePlugin(Star):
     ):
         """优先使用 AstrBot HTML 渲染图片，失败时降级为纯文本。"""
         try:
-            image_url = await self.html_render(html_content, data={}, options={"full_page": True})
+            import asyncio
+            image_url = await asyncio.wait_for(
+                self.html_render(html_content, data={}, options={"full_page": True}),
+                timeout=3.0,
+            )
             return event.image_result(image_url)
+        except asyncio.TimeoutError:
+            logger.warning("HTML 渲染超时，改用纯文本。")
+            return event.plain_result(fallback_text)
         except Exception as error:
             logger.warning(f"HTML 图片结果生成失败，改用纯文本：{error}")
             return event.plain_result(fallback_text)
