@@ -8,12 +8,12 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
-from api.base import EchoCaveApiError
-from api.echo_cave import EchoCaveApiClient
-from api.qq_binding import QqBindingApiClient
-from config import EchoCaveConfig
-from renderer import HtmlTemplateRenderer
-from state import AuthStateManager
+from .api.base import EchoCaveApiError
+from .api.echo_cave import EchoCaveApiClient
+from .api.qq_binding import QqBindingApiClient
+from .config import EchoCaveConfig
+from .renderer import HtmlTemplateRenderer
+from .state import AuthStateManager
 
 
 @register(

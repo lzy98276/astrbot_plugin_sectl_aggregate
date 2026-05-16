@@ -7,7 +7,7 @@ from typing import Any
 
 import aiohttp
 
-from config import EchoCaveConfig
+from ..config import EchoCaveConfig
 
 
 class EchoCaveApiError(RuntimeError):
