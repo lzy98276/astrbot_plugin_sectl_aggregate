@@ -83,6 +83,9 @@ class EchoCavePlugin(Star):
                 async for _ in self._handle_delete(event, rest):
                     yield _
                 return
+            if action == "测试":
+                yield await self._handle_test_api(event)
+                return
             yield event.plain_result("未知回声洞指令，请发送：help")
         except EchoCaveApiError as error:
             logger.warning(f"回声洞 API 调用失败：{error}")
@@ -227,6 +230,17 @@ class EchoCavePlugin(Star):
         yield event.plain_result("正在删除，请稍候...")
         await self.echo_api.delete_echo(echo_doc["document_id"], user_id=_get_user_id(event))
         yield event.plain_result(f"回声洞 #{echo_id} 已删除。")
+
+    async def _handle_test_api(self, event: AstrMessageEvent):
+        url = self.config.api_base_url
+        yield event.plain_result(f"正在测试 API 地址：{url}")
+        try:
+            result = await self.echo_api.health_check()
+            yield event.plain_result(f"✅ API 连接成功！\r\n地址：{url}\r\n响应：{result}")
+        except EchoCaveApiError as error:
+            yield event.plain_result(f"❌ API 连接失败\r\n地址：{url}\r\n错误：{error}")
+        except Exception as error:
+            yield event.plain_result(f"❌ 测试过程出错\r\n地址：{url}\r\n错误：{error}")
 
     async def _handle_bind_request(self, event: AstrMessageEvent, qq: str):
         """申请绑定 Key，并缓存待确认状态。"""

@@ -116,6 +116,12 @@ class BaseApiClient:
                 json=json_data,
                 headers=headers,
             ) as response:
+                if response.status >= 400:
+                    body = await response.text()
+                    raise EchoCaveApiError(
+                        f"HTTP {response.status} {response.reason or ''} "
+                        f"from {method.upper()} {url}: {body[:200]}"
+                    )
                 response_body = await response.text()
                 return self._parse_response(response_body)
 
@@ -142,4 +148,7 @@ def _format_error(error: Exception | None) -> str:
     msg = str(error).strip()
     if msg:
         return msg
-    return f"{type(error).__name__}"
+    type_name = type(error).__name__
+    if type_name:
+        return f"[{type_name}]"
+    return "未知错误"

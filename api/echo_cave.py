@@ -10,6 +10,10 @@ from api.base import BaseApiClient
 class EchoCaveApiClient(BaseApiClient):
     """提供回声洞核心资源的高层调用方法。"""
 
+    async def health_check(self) -> str:
+        response = await self.request("GET", "/")
+        return str(response)[:200]
+
     async def create_echo(
         self, content: str, *, user_id: str, token: str | None = None
     ) -> dict[str, Any]:

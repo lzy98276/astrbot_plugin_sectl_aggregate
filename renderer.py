@@ -28,6 +28,7 @@ class HtmlTemplateRenderer:
             {"name": "回声洞 删除 编号", "desc": "删除自己发布的回声洞"},
             {"name": "绑定 QQ号", "desc": "申请 QQ 绑定 Key"},
             {"name": "绑定状态", "desc": "查看当前账号 QQ 绑定状态"},
+            {"name": "回声洞 测试", "desc": "测试 API Base URL 是否可访问"},
         ]
         items = "".join(
             f"<li><strong>{html.escape(item['name'])}</strong><span>{html.escape(item['desc'])}</span></li>"
@@ -61,6 +62,7 @@ class HtmlTemplateRenderer:
                 "回声洞 删除 编号：删除回声洞",
                 "绑定 QQ号：申请 QQ 绑定 Key",
                 "绑定状态：查看绑定状态",
+                "回声洞 测试：测试 API 地址是否可访问",
             ]
         )
 
