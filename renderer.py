@@ -50,7 +50,7 @@ class HtmlTemplateRenderer:
 
     def render_menu_text(self) -> str:
         """生成纯文本菜单，作为图片能力不可用时的降级输出。"""
-        return "\n".join(
+        return "\r\n".join(
             [
                 "📣 回声洞指令菜单",
                 "help：查看帮助菜单",
