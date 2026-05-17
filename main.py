@@ -43,7 +43,7 @@ class EchoCavePlugin(Star):
 
     @filter.command("help")
     async def help_menu(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """处理独立 help 指令，返回插件功能菜单图片。"""
+        """查看回声洞帮助菜单"""
         try:
             yield await self._html_result(
                 event, self.renderer.render_menu(), self.renderer.render_menu_text()
@@ -54,7 +54,7 @@ class EchoCavePlugin(Star):
 
     @filter.command("回声洞")
     async def echo_cave(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """处理回声洞主指令，支持 help、投稿、查看、编辑、删除和我的。"""
+        """回声洞主指令：投稿、查看（随机/编号/最新/列表）、编辑、删除、我的"""
         command_text = _normalize_command(event.message_str)
         action, rest = _split_action(command_text)
         try:
@@ -97,7 +97,7 @@ class EchoCavePlugin(Star):
 
     @filter.command("绑定")
     async def bind_qq(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """处理 QQ 绑定指令，指令格式为：绑定 QQ号 或 绑定 Key。"""
+        """申请 QQ 绑定 Key 或确认绑定，格式：绑定 QQ号 / 绑定 Key"""
         command_text = _normalize_command(event.message_str)
         argument = command_text.removeprefix("绑定").strip()
         try:
@@ -120,7 +120,7 @@ class EchoCavePlugin(Star):
 
     @filter.command("绑定状态")
     async def binding_status(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """处理 QQ 绑定状态查询指令。"""
+        """查看当前 QQ 绑定状态"""
         try:
             status = await self.binding_api.get_status(_get_user_id(event))
             yield event.plain_result(self._format_binding_status(event, status))
