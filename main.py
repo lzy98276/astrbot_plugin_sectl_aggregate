@@ -64,19 +64,24 @@ class EchoCavePlugin(Star):
                 )
                 return
             if action == "投稿":
-                yield await self._handle_create(event, rest)
+                async for _ in self._handle_create(event, rest):
+                    yield _
                 return
             if action == "查看":
-                yield await self._handle_view(event, rest)
+                async for _ in self._handle_view(event, rest):
+                    yield _
                 return
             if action == "我的":
-                yield await self._handle_my_echoes(event)
+                async for _ in self._handle_my_echoes(event):
+                    yield _
                 return
             if action == "编辑":
-                yield await self._handle_update(event, rest)
+                async for _ in self._handle_update(event, rest):
+                    yield _
                 return
             if action == "删除":
-                yield await self._handle_delete(event, rest)
+                async for _ in self._handle_delete(event, rest):
+                    yield _
                 return
             yield event.plain_result("未知回声洞指令，请发送：help")
         except EchoCaveApiError as error:
@@ -100,7 +105,8 @@ class EchoCavePlugin(Star):
             ):
                 yield await self._handle_bind_confirm(event, argument)
                 return
-            yield await self._handle_bind_request(event, argument)
+            async for _ in self._handle_bind_request(event, argument):
+                yield _
         except EchoCaveApiError as error:
             logger.warning(f"QQ 绑定 API 调用失败：{error}")
             yield event.plain_result(f"绑定失败：{error}")
