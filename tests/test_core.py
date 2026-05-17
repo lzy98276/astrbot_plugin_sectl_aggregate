@@ -139,7 +139,7 @@ class CoreLogicTest(unittest.TestCase):
         self.assertFalse(_is_bound_status({"status": "未绑定"}))
 
     def test_renderer_uses_standalone_binding_commands(self):
-        """校验菜单包含独立 help 和绑定指令，不包含旧写法。"""
+        """校验根目录菜单包含独立 help 和绑定指令，不包含旧写法。"""
         with TemporaryDirectory() as temp_dir:
             template_dir = Path(temp_dir) / "templates"
             template_dir.mkdir()
@@ -149,13 +149,33 @@ class CoreLogicTest(unittest.TestCase):
             )
             renderer = HtmlTemplateRenderer(template_dir)
 
-            menu = renderer.render_menu_text()
+            root_menu = renderer.render_root_menu_text()
 
-        self.assertIn("绑定 QQ号", menu)
-        self.assertIn("绑定状态", menu)
-        self.assertIn("help：查看帮助菜单", menu)
-        self.assertNotIn("回声洞 help", menu)
-        self.assertNotIn("回声洞 绑定", menu)
+        self.assertIn("黎悠看板娘指令菜单", root_menu)
+        self.assertIn("绑定 QQ号", root_menu)
+        self.assertIn("绑定状态", root_menu)
+        self.assertIn("回声洞 帮助", root_menu)
+        self.assertNotIn("回声洞 投稿", root_menu)
+        self.assertNotIn("回声洞 测试", root_menu)
+
+    def test_renderer_echo_cave_menu_separates_commands(self):
+        """校验回声洞菜单仅包含带回声洞前缀的指令。"""
+        with TemporaryDirectory() as temp_dir:
+            template_dir = Path(temp_dir) / "templates"
+            template_dir.mkdir()
+            (template_dir / "menu.html").write_text("$commands", encoding="utf-8")
+            (template_dir / "echo_display.html").write_text(
+                "$content", encoding="utf-8"
+            )
+            renderer = HtmlTemplateRenderer(template_dir)
+
+            cave_menu = renderer.render_menu_text()
+
+        self.assertIn("回声洞指令菜单", cave_menu)
+        self.assertIn("回声洞 投稿 内容", cave_menu)
+        self.assertIn("回声洞 查看 随机", cave_menu)
+        self.assertNotIn("绑定 QQ号", cave_menu)
+        self.assertNotIn("help：查看", cave_menu)
 
     def test_config_reads_astrbot_config_safely(self):
         """校验 AstrBot 配置可覆盖默认值，非法数值会安全降级。"""

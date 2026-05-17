@@ -23,7 +23,7 @@ from renderer import HtmlTemplateRenderer
 from state import AuthStateManager
 
 DEFAULT_MY_ECHO_LIMIT = 20
-VIEW_MODE_ALIASES = {"最新": "最新", "列表": "列表", "latest": "最新", "list": "列表"}
+VIEW_MODE_ALIASES = {"最新": "最新", "列表": "列表", "随机": "随机", "latest": "最新", "list": "列表", "random": "随机"}
 
 
 @register(
@@ -46,10 +46,10 @@ class EchoCavePlugin(Star):
 
     @filter.command("help")
     async def help_menu(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """查看回声洞帮助菜单"""
+        """查看根目录帮助菜单"""
         try:
             yield await self._html_result(
-                event, self.renderer.render_menu(), self.renderer.render_menu_text()
+                event, self.renderer.render_root_menu(), self.renderer.render_root_menu_text()
             )
         except Exception as error:
             logger.exception(f"help 指令处理异常：{error}")
@@ -130,12 +130,6 @@ class EchoCavePlugin(Star):
             logger.exception(f"QQ 绑定状态处理异常：{error}")
             yield event.plain_result("查询服务暂时不可用，请稍后再试。")
 
-    @filter.command("测试")
-    async def test_api(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """测试 API 地址是否可访问"""
-        async for _ in self._handle_test_api(event):
-            yield _
-
     async def _handle_create(self, event: AstrMessageEvent, content: str):
         """处理投稿逻辑，写操作会先检查绑定状态。"""
         if not content:
@@ -168,13 +162,16 @@ class EchoCavePlugin(Star):
                 yield _
             return
 
-        if mode in ("最新", "列表"):
+        if mode in ("最新", "列表", "随机"):
             count, page = _parse_view_pagination(parts[1:])
             if mode == "最新":
                 async for _ in self._view_latest(event, count, page):
                     yield _
-            else:
+            elif mode == "列表":
                 async for _ in self._view_list(event, count, page):
+                    yield _
+            else:
+                async for _ in self._view_random_batch(event, count):
                     yield _
             return
 
@@ -192,6 +189,15 @@ class EchoCavePlugin(Star):
             self.renderer.render_echo(response),
             self.renderer.render_echo_text(response),
         )
+
+    async def _view_random_batch(self, event: AstrMessageEvent, count: int):
+        """批量随机查看多条回声洞。"""
+        yield event.plain_result("正在随机查询回声洞，请稍候...")
+        echoes, total = await self.echo_api.get_echoes(mode="random", limit=count, offset=0)
+        if not echoes:
+            yield event.plain_result("未找到回声洞。")
+            return
+        yield event.plain_result(self._format_echo_batch("随机", echoes, total, 1, count))
 
     async def _view_by_id(self, event: AstrMessageEvent, echo_id: str):
         yield event.plain_result("正在查询回声洞，请稍候...")

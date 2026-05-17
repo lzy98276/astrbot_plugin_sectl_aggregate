@@ -14,14 +14,29 @@ class HtmlTemplateRenderer:
     def __init__(self, template_dir: Path):
         self.template_dir = template_dir
 
-    def render_menu(self) -> str:
-        """渲染回声洞帮助菜单 HTML。"""
+    def render_root_menu(self) -> str:
+        """渲染根目录帮助菜单 HTML（无回声洞前缀的指令）。"""
         commands = [
-            {"name": "help", "desc": "查看回声洞帮助菜单"},
+            {"name": "help", "desc": "查看帮助菜单"},
+            {"name": "回声洞 帮助", "desc": "查看回声洞专属帮助菜单"},
+            {"name": "绑定 QQ号", "desc": "申请 QQ 绑定 Key"},
+            {"name": "绑定 临时Key", "desc": "完成 QQ 绑定确认"},
+            {"name": "绑定状态", "desc": "查看当前账号 QQ 绑定状态"},
+        ]
+        items = "".join(
+            f"<li><strong>{html.escape(item['name'])}</strong><span>{html.escape(item['desc'])}</span></li>"
+            for item in commands
+        )
+        return self._render("menu.html", {"commands": items})
+
+    def render_menu(self) -> str:
+        """渲染回声洞帮助菜单 HTML（带回声洞前缀的指令）。"""
+        commands = [
             {
                 "name": "回声洞 投稿 内容",
                 "desc": "投稿一条新的回声洞，需要先完成 QQ 绑定",
             },
+            {"name": "回声洞 查看 随机 [数量]", "desc": "随机查看多条回声洞"},
             {"name": "回声洞 查看 [编号]", "desc": "按编号查看单条回声洞"},
             {
                 "name": "回声洞 查看 最新 [数量] [第N页]",
@@ -34,9 +49,6 @@ class HtmlTemplateRenderer:
             {"name": "回声洞 我的", "desc": "查看自己投稿的回声洞列表"},
             {"name": "回声洞 编辑 编号 新内容", "desc": "编辑自己发布的回声洞"},
             {"name": "回声洞 删除 编号", "desc": "删除自己发布的回声洞"},
-            {"name": "绑定 QQ号", "desc": "申请 QQ 绑定 Key"},
-            {"name": "绑定状态", "desc": "查看当前账号 QQ 绑定状态"},
-            {"name": "回声洞 测试", "desc": "测试 API Base URL 是否可访问"},
         ]
         items = "".join(
             f"<li><strong>{html.escape(item['name'])}</strong><span>{html.escape(item['desc'])}</span></li>"
@@ -57,22 +69,32 @@ class HtmlTemplateRenderer:
             },
         )
 
+    def render_root_menu_text(self) -> str:
+        """生成根目录纯文本菜单，包含无回声洞前缀的指令。"""
+        return "\r\n".join(
+            [
+                "📣 黎悠看板娘指令菜单",
+                "help：查看帮助菜单",
+                "回声洞 帮助：查看回声洞帮助菜单",
+                "绑定 QQ号：申请 QQ 绑定 Key",
+                "绑定 临时Key：完成 QQ 绑定确认",
+                "绑定状态：查看绑定状态",
+            ]
+        )
+
     def render_menu_text(self) -> str:
-        """生成纯文本菜单，作为图片能力不可用时的降级输出。"""
+        """生成回声洞纯文本菜单，作为图片能力不可用时的降级输出。"""
         return "\r\n".join(
             [
                 "📣 回声洞指令菜单",
-                "help：查看帮助菜单",
                 "回声洞 投稿 内容：投稿回声洞",
                 "回声洞 查看 [编号]：按编号查看单条",
+                "回声洞 查看 随机 [数量]：随机查看多条",
                 "回声洞 查看 最新 [数量] [第N页]：查看最新N条（最多10）",
                 "回声洞 查看 列表 [数量] [第N页]：按数量分页浏览",
                 "回声洞 我的：查看自己投稿的回声洞",
                 "回声洞 编辑 编号 新内容：编辑回声洞",
                 "回声洞 删除 编号：删除回声洞",
-                "绑定 QQ号：申请 QQ 绑定 Key",
-                "绑定状态：查看绑定状态",
-                "回声洞 测试：测试 API 地址是否可访问",
             ]
         )
 
