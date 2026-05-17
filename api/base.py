@@ -95,10 +95,16 @@ class BaseApiClient:
             ) as response:
                 if response.status >= 400:
                     body = await response.text()
-                    raise EchoCaveApiError(
+                    error_msg = (
                         f"HTTP {response.status} {response.reason or ''} "
                         f"from {method.upper()} {url}: {body[:200]}"
                     )
+                    if response.status == 401:
+                        error_msg += (
+                            "。请检查插件配置中的 api_token 是否已填写有效的 "
+                            "Appwrite JWT 或 API Key（管理后台生成）"
+                        )
+                    raise EchoCaveApiError(error_msg)
                 response_body = await response.text()
                 return self._parse_response(response_body)
 

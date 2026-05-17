@@ -6,15 +6,15 @@
     "default": "https://appwrite.sectl.cn"
   },
   "api_token": {
-    "description": "API 认证 Token",
+    "description": "API 认证 Token（必填：用于 Appwrite JWT / API Key 认证）",
     "type": "text",
-    "hint": "用于访问回声洞 API 的 Bearer Token",
+    "hint": "Appwrite JWT 或管理后台生成的 API Key，用于 /api/qq-binding/status 等需认证端点",
     "default": ""
   },
   "internal_token": {
-    "description": "内部投稿 Token",
+    "description": "内部投稿 Token（必填：用于回声洞投稿认证）",
     "type": "text",
-    "hint": "用于内部投稿接口的 x-echo-cave-token",
+    "hint": "用于 /api/echo-cave/internal 接口的 x-echo-cave-token，未配置时投稿不可用",
     "default": ""
   },
   "request_timeout": {

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from api.base import BaseApiClient
+from api.base import BaseApiClient, EchoCaveApiError
 
 
 class EchoCaveApiClient(BaseApiClient):
@@ -21,14 +21,21 @@ class EchoCaveApiClient(BaseApiClient):
     async def create_echo(
         self, content: str, *, user_id: str, token: str | None = None
     ) -> dict[str, Any]:
-        """提交一条新的回声洞内容。"""
+        """提交一条新的回声洞内容。
+
+        内部投稿接口依赖 x-echo-cave-token（配置项 internal_token），
+        未配置时直接报错避免无效请求。
+        """
+        if not self.config.internal_token:
+            raise EchoCaveApiError(
+                "投稿失败：插件配置中的 internal_token 未设置，"
+                "请联系管理员配置内部投稿 Token"
+            )
         return await self.request(
             "POST",
             "/api/echo-cave/internal",
             json_data={"content": content, "author_id": user_id},
-            headers={"x-echo-cave-token": self.config.internal_token}
-            if self.config.internal_token
-            else None,
+            headers={"x-echo-cave-token": self.config.internal_token},
             token=token,
         )
 

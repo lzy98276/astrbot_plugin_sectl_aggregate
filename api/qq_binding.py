@@ -10,10 +10,19 @@ from api.base import BaseApiClient
 class QqBindingApiClient(BaseApiClient):
     """封装 QQ 绑定状态、申请 Key 和确认绑定接口。"""
 
-    async def get_status(self, user_id: str) -> dict[str, Any]:
-        """查询当前 AstrBot 用户的 QQ 绑定状态。"""
+    async def get_status(
+        self, user_id: str, *, token: str | None = None
+    ) -> dict[str, Any]:
+        """查询当前 AstrBot 用户的 QQ 绑定状态。
+
+        此端点需要有效的 Appwrite JWT 认证（配置项 api_token），
+        否则服务端会返回 401。
+        """
         return await self.request(
-            "GET", "/api/qq-binding/status", query={"user_id": user_id}
+            "GET",
+            "/api/qq-binding/status",
+            query={"user_id": user_id},
+            token=token,
         )
 
     async def request_key(self, user_id: str, qq: str) -> dict[str, Any]:

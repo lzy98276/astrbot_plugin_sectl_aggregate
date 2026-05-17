@@ -47,13 +47,16 @@ class EchoCavePlugin(Star):
     @filter.command("help")
     async def help_menu(self, event: AstrMessageEvent) -> AsyncGenerator:
         """查看根目录帮助菜单"""
+        # 先保证纯文本降级内容能正常生成（纯字符串操作，不会失败）
+        fallback = self.renderer.render_root_menu_text()
         try:
-            yield await self._html_result(
-                event, self.renderer.render_root_menu(), self.renderer.render_root_menu_text()
-            )
+            html = self.renderer.render_root_menu()
         except Exception as error:
-            logger.exception(f"help 指令处理异常：{error}")
-            yield event.plain_result("帮助菜单暂时不可用，请稍后再试。")
+            logger.warning(f"帮助菜单 HTML 模板渲染失败，使用纯文本降级：{error}")
+            yield event.plain_result(fallback)
+            return
+        # _html_result 内部已有完善的 try/except 降级到纯文本
+        yield await self._html_result(event, html, fallback)
 
     @filter.command("回声洞")
     async def echo_cave(self, event: AstrMessageEvent) -> AsyncGenerator:
@@ -89,7 +92,7 @@ class EchoCavePlugin(Star):
             yield event.plain_result("未知回声洞指令，请发送：help")
         except EchoCaveApiError as error:
             logger.warning(f"回声洞 API 调用失败：{error}")
-            yield event.plain_result(f"操作失败：{error}")
+            yield event.plain_result("操作失败，请稍后重试或联系管理员。")
         except Exception as error:
             logger.exception(f"回声洞指令处理异常：{error}")
             yield event.plain_result("回声洞暂时没有回应，请稍后再试。")
@@ -121,7 +124,9 @@ class EchoCavePlugin(Star):
     async def binding_status(self, event: AstrMessageEvent) -> AsyncGenerator:
         """查看当前 QQ 绑定状态"""
         try:
-            status = await self.binding_api.get_status(_get_user_id(event))
+            status = await self.binding_api.get_status(
+                _get_user_id(event), token=self.config.api_token or None
+            )
             yield event.plain_result(self._format_binding_status(event, status))
         except EchoCaveApiError as error:
             logger.warning(f"QQ 绑定状态查询失败：{error}")
@@ -231,12 +236,14 @@ class EchoCavePlugin(Star):
 
     async def _handle_my_echoes(self, event: AstrMessageEvent):
         """查询当前用户投稿的回声洞列表。"""
+        user_id = _get_user_id(event)
         if not await self._ensure_bound(event):
             yield event.plain_result("请先完成 QQ 绑定：绑定 QQ号")
             return
         yield event.plain_result("正在查询你的回声洞，请稍候...")
-        status = await self.binding_api.get_status(_get_user_id(event))
-        qq_number = _extract_response_value(status, "qq_number", "qq") or ""
+        # _ensure_bound 已缓存绑定状态，直接从缓存取 QQ 号
+        bound = self.auth_state.get_bound(user_id)
+        qq_number = (bound or {}).get("qq", "") if bound else ""
         if not qq_number:
             yield event.plain_result("未找到绑定的 QQ 号。")
             return
@@ -303,17 +310,6 @@ class EchoCavePlugin(Star):
         await self.echo_api.delete_echo(echo_doc["document_id"], user_id=_get_user_id(event))
         yield event.plain_result(f"回声洞 #{echo_id} 已删除。")
 
-    async def _handle_test_api(self, event: AstrMessageEvent):
-        url = self.config.api_base_url
-        yield event.plain_result(f"正在测试 API 地址：{url}")
-        try:
-            result = await self.echo_api.health_check()
-            yield event.plain_result(f"✅ API 连接成功！\r\n地址：{url}\r\n响应：{result}")
-        except EchoCaveApiError as error:
-            yield event.plain_result(f"❌ API 连接失败\r\n地址：{url}\r\n错误：{error}")
-        except Exception as error:
-            yield event.plain_result(f"❌ 测试过程出错\r\n地址：{url}\r\n错误：{error}")
-
     def _format_echo_batch(
         self, mode: str, echoes: list[dict], total: int, page: int, per_page: int
     ) -> str:
@@ -357,7 +353,9 @@ class EchoCavePlugin(Star):
         if not pending:
             return event.plain_result("请先发送：绑定 QQ号，申请临时 Key。")
         response = await self.binding_api.confirm(user_id, pending.qq, key)
-        status = await self.binding_api.get_status(user_id)
+        status = await self.binding_api.get_status(
+            user_id, token=self.config.api_token or None
+        )
         if _is_bound_status(status):
             qq = str(_extract_response_value(status, "qq_number", "qq") or pending.qq)
             self.auth_state.set_bound(user_id, {"qq": qq})
@@ -368,11 +366,22 @@ class EchoCavePlugin(Star):
         return event.plain_result(str(message))
 
     async def _ensure_bound(self, event: AstrMessageEvent) -> bool:
-        """优先使用缓存，缓存缺失时调用服务端确认绑定状态。"""
+        """优先使用缓存，缓存缺失时调用服务端确认绑定状态。
+
+        API 认证失败等异常会被静默捕获并当作"未绑定"处理，
+        避免原始 HTTP 错误暴露给用户。
+        """
         user_id = _get_user_id(event)
         if self.auth_state.is_bound(user_id):
             return True
-        status = await self.binding_api.get_status(user_id)
+        try:
+            status = await self.binding_api.get_status(
+                user_id, token=self.config.api_token or None
+            )
+        except EchoCaveApiError as error:
+            logger.warning(f"查询绑定状态失败，按未绑定处理：{error}")
+            self.auth_state.clear_bound(user_id)
+            return False
         if _is_bound_status(status):
             self.auth_state.set_bound(
                 user_id,
