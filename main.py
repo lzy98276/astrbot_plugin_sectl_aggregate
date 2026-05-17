@@ -22,6 +22,9 @@ from config import EchoCaveConfig
 from renderer import HtmlTemplateRenderer
 from state import AuthStateManager
 
+DEFAULT_MY_ECHO_LIMIT = 20
+VIEW_MODE_ALIASES = {"最新": "最新", "列表": "列表", "latest": "最新", "list": "列表"}
+
 
 @register(
     "astrbot_plugin_sectl_aggregate", "SECTL", "回声洞投稿、查询和 QQ 绑定插件", "1.0.0"
@@ -83,10 +86,6 @@ class EchoCavePlugin(Star):
                 async for _ in self._handle_delete(event, rest):
                     yield _
                 return
-            if action == "测试":
-                async for _ in self._handle_test_api(event):
-                    yield _
-                return
             yield event.plain_result("未知回声洞指令，请发送：help")
         except EchoCaveApiError as error:
             logger.warning(f"回声洞 API 调用失败：{error}")
@@ -131,6 +130,12 @@ class EchoCavePlugin(Star):
             logger.exception(f"QQ 绑定状态处理异常：{error}")
             yield event.plain_result("查询服务暂时不可用，请稍后再试。")
 
+    @filter.command("测试")
+    async def test_api(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """测试 API 地址是否可访问"""
+        async for _ in self._handle_test_api(event):
+            yield _
+
     async def _handle_create(self, event: AstrMessageEvent, content: str):
         """处理投稿逻辑，写操作会先检查绑定状态。"""
         if not content:
@@ -156,7 +161,7 @@ class EchoCavePlugin(Star):
                 yield _
             return
 
-        mode = parts[0]
+        mode = VIEW_MODE_ALIASES.get(parts[0], parts[0])
 
         if mode.isdigit():
             async for _ in self._view_by_id(event, mode):
@@ -164,18 +169,7 @@ class EchoCavePlugin(Star):
             return
 
         if mode in ("最新", "列表"):
-            count = 1
-            page = 1
-            i = 1
-            while i < len(parts):
-                token = parts[i]
-                if token.isdigit():
-                    count = min(int(token), 10)
-                elif token.startswith("第") and token.endswith("页"):
-                    page_str = token[1:-1]
-                    if page_str.isdigit():
-                        page = int(page_str)
-                i += 1
+            count, page = _parse_view_pagination(parts[1:])
             if mode == "最新":
                 async for _ in self._view_latest(event, count, page):
                     yield _
@@ -240,7 +234,7 @@ class EchoCavePlugin(Star):
         if not qq_number:
             yield event.plain_result("未找到绑定的 QQ 号。")
             return
-        echoes = await self.echo_api.get_my_echoes(qq_number)
+        echoes = await self.echo_api.get_my_echoes(qq_number, limit=DEFAULT_MY_ECHO_LIMIT)
         if not echoes:
             yield event.plain_result("你还没有投稿过回声洞。")
             return
@@ -352,11 +346,18 @@ class EchoCavePlugin(Star):
 
     async def _handle_bind_confirm(self, event: AstrMessageEvent, key: str):
         """确认绑定 Key，并刷新本地绑定状态。"""
-        pending = self.auth_state.get_pending(_get_user_id(event))
+        user_id = _get_user_id(event)
+        pending = self.auth_state.get_pending(user_id)
         if not pending:
             return event.plain_result("请先发送：绑定 QQ号，申请临时 Key。")
-        response = await self.binding_api.confirm(_get_user_id(event), pending.qq, key)
-        self.auth_state.set_bound(_get_user_id(event), {"qq": pending.qq})
+        response = await self.binding_api.confirm(user_id, pending.qq, key)
+        status = await self.binding_api.get_status(user_id)
+        if _is_bound_status(status):
+            qq = str(_extract_response_value(status, "qq_number", "qq") or pending.qq)
+            self.auth_state.set_bound(user_id, {"qq": qq})
+        else:
+            self.auth_state.clear_pending(user_id)
+            raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
         message = _extract_response_value(response, "message", "msg") or "QQ 绑定成功。"
         return event.plain_result(str(message))
 
@@ -416,6 +417,22 @@ def _split_first(text: str) -> tuple[str, str]:
     if len(parts) == 1:
         return parts[0], ""
     return parts[0], parts[1]
+
+
+def _parse_view_pagination(tokens: list[str]) -> tuple[int, int]:
+    """解析最新/列表指令中的数量和页码参数。"""
+    count = 1
+    page = 1
+    for token in tokens:
+        if token.isdigit():
+            count = min(max(int(token), 1), 10)
+            continue
+        normalized_token = token.removeprefix("页").removesuffix("页")
+        if normalized_token.startswith("第"):
+            normalized_token = normalized_token[1:]
+        if normalized_token.isdigit():
+            page = max(int(normalized_token), 1)
+    return count, page
 
 
 def _get_user_id(event: AstrMessageEvent) -> str:

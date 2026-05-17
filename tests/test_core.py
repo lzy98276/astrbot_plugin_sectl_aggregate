@@ -1,5 +1,6 @@
 """回声洞插件核心逻辑测试。"""
 
+import asyncio
 import sys
 import types
 import unittest
@@ -26,11 +27,20 @@ sys.modules.setdefault("astrbot.api", astrbot_api_module)
 sys.modules.setdefault("astrbot.api.event", astrbot_event_module)
 sys.modules.setdefault("astrbot.api.star", astrbot_star_module)
 
-from api.base import BaseApiClient, EchoCaveApiError
+import aiohttp
+
+from api.base import BaseApiClient, EchoCaveApiError, _should_retry_error, _summarize_headers
 from api.echo_cave import EchoCaveApiClient
 from api.qq_binding import QqBindingApiClient
 from config import EchoCaveConfig
-from main import _is_bound_status, _is_qq_number, _normalize_command, _split_action
+from main import (
+    EchoCavePlugin,
+    _is_bound_status,
+    _is_qq_number,
+    _normalize_command,
+    _parse_view_pagination,
+    _split_action,
+)
 from renderer import HtmlTemplateRenderer
 from state import AuthStateManager
 
@@ -81,6 +91,29 @@ class RecordingQqBindingClient(QqBindingApiClient):
             }
         )
         return {"ok": True}
+
+
+class FakeBindingApi:
+    """用于测试绑定确认后的状态刷新逻辑。"""
+
+    def __init__(self, status_response):
+        self.status_response = status_response
+        self.calls = []
+
+    async def confirm(self, user_id, qq, key):
+        self.calls.append(("confirm", user_id, qq, key))
+        return {"message": "绑定完成"}
+
+    async def get_status(self, user_id):
+        self.calls.append(("status", user_id))
+        return self.status_response
+
+
+class FakeEvent:
+    """用于测试插件返回结果的简化事件对象。"""
+
+    def plain_result(self, message):
+        return message
 
 
 class CoreLogicTest(unittest.TestCase):
@@ -167,6 +200,16 @@ class CoreLogicTest(unittest.TestCase):
         manager.clear_bound("user-1")
         self.assertFalse(manager.is_bound("user-1"))
 
+    def test_auth_state_clears_expired_pending_binding(self):
+        """校验待确认绑定超过有效期后会自动清理。"""
+        manager = AuthStateManager(pending_ttl_seconds=1)
+
+        with patch("state.time", return_value=100.0):
+            manager.set_pending("user-1", "12345", "KEY")
+
+        with patch("state.time", return_value=102.0):
+            self.assertIsNone(manager.get_pending("user-1"))
+
     def test_renderer_escapes_echo_content(self):
         """校验回声洞模板渲染会转义用户内容，避免注入 HTML。"""
         with TemporaryDirectory() as temp_dir:
@@ -184,6 +227,31 @@ class CoreLogicTest(unittest.TestCase):
 
         self.assertIn("&lt;b&gt;洞&lt;/b&gt;<br>新行", html)
         self.assertNotIn("<b>洞</b>", html)
+
+    def test_parse_view_pagination_supports_count_and_page(self):
+        """校验查看指令支持数量和第N页混合解析。"""
+        self.assertEqual(_parse_view_pagination(["5", "第3页"]), (5, 3))
+        self.assertEqual(_parse_view_pagination(["页2"]), (1, 2))
+
+    def test_summarize_headers_masks_sensitive_values(self):
+        """校验日志摘要不会暴露鉴权头内容。"""
+        summary = _summarize_headers(
+            {
+                "Accept": "application/json",
+                "Authorization": "Bearer secret-token",
+                "x-echo-cave-token": "internal-token",
+            }
+        )
+
+        self.assertEqual(summary["Authorization"], "<masked>")
+        self.assertEqual(summary["x-echo-cave-token"], "<masked>")
+        self.assertEqual(summary["Accept"], "application/json")
+
+    def test_should_retry_error_only_allows_transient_failures(self):
+        """校验仅对瞬时网络异常启用重试。"""
+        self.assertTrue(_should_retry_error(asyncio.TimeoutError()))
+        self.assertTrue(_should_retry_error(aiohttp.ClientConnectionError()))
+        self.assertFalse(_should_retry_error(EchoCaveApiError("业务失败")))
 
 
 class ApiClientTest(unittest.IsolatedAsyncioTestCase):
@@ -208,7 +276,9 @@ class ApiClientTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.calls[2]["query"], {"id": "12"})
         self.assertEqual(client.calls[3]["method"], "PUT")
         self.assertEqual(client.calls[3]["json_data"]["document_id"], "12")
+        self.assertEqual(client.calls[3]["json_data"]["author_id"], "user-1")
         self.assertEqual(client.calls[4]["method"], "DELETE")
+        self.assertEqual(client.calls[4]["json_data"]["author_id"], "user-1")
 
     async def test_qq_binding_client_maps_binding_endpoints(self):
         """校验绑定状态、申请 Key 和确认绑定接口参数。"""
@@ -227,6 +297,46 @@ class ApiClientTest(unittest.IsolatedAsyncioTestCase):
             client.calls[2]["json_data"],
             {"user_id": "user-1", "qq_number": "12345", "temp_key": "KEY"},
         )
+
+
+class PluginBindingFlowTest(unittest.IsolatedAsyncioTestCase):
+    """验证插件绑定确认后的状态刷新行为。"""
+
+    async def test_bind_confirm_refreshes_server_status_before_marking_bound(self):
+        """校验确认绑定后会以服务端状态为准刷新本地缓存。"""
+        plugin = EchoCavePlugin.__new__(EchoCavePlugin)
+        plugin.auth_state = AuthStateManager()
+        plugin.binding_api = FakeBindingApi({"status": "已绑定", "qq_number": "12345"})
+
+        plugin.auth_state.set_pending("user-1", "12345", "KEY")
+        event = FakeEvent()
+
+        with patch("main._get_user_id", return_value="user-1"):
+            result = await plugin._handle_bind_confirm(event, "KEY")
+
+        self.assertEqual(result, "绑定完成")
+        self.assertTrue(plugin.auth_state.is_bound("user-1"))
+        self.assertIsNone(plugin.auth_state.get_pending("user-1"))
+        self.assertEqual(
+            plugin.binding_api.calls,
+            [("confirm", "user-1", "12345", "KEY"), ("status", "user-1")],
+        )
+
+    async def test_bind_confirm_rejects_when_server_not_bound(self):
+        """校验服务端未返回已绑定状态时会抛出异常并清理待确认状态。"""
+        plugin = EchoCavePlugin.__new__(EchoCavePlugin)
+        plugin.auth_state = AuthStateManager()
+        plugin.binding_api = FakeBindingApi({"status": "未绑定"})
+
+        plugin.auth_state.set_pending("user-1", "12345", "KEY")
+        event = FakeEvent()
+
+        with patch("main._get_user_id", return_value="user-1"):
+            with self.assertRaises(EchoCaveApiError):
+                await plugin._handle_bind_confirm(event, "KEY")
+
+        self.assertFalse(plugin.auth_state.is_bound("user-1"))
+        self.assertIsNone(plugin.auth_state.get_pending("user-1"))
 
 
 if __name__ == "__main__":

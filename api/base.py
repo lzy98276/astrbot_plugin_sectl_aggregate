@@ -37,26 +37,11 @@ class BaseApiClient:
         logger = logging.getLogger("astrbot")
 
         url = f"{self.config.api_base_url}{path}"
-        clean_query = {}
-        if query:
-            clean_query = {
-                key: value for key, value in query.items() if value not in (None, "")
-            }
-
-        auth_token = token or self.config.api_token
-        req_headers: dict[str, str] = {"Accept": "application/json"}
-        if auth_token:
-            req_headers["Authorization"] = f"Bearer {auth_token}"
-        if headers:
-            req_headers.update(headers)
-
-        display_headers = {
-            k: (v[:8] + "..." if len(v) > 8 else v)
-            for k, v in req_headers.items()
-        }
+        clean_query = _clean_mapping(query)
+        req_headers = self._build_headers(token=token, extra_headers=headers)
         logger.info(
             f"发起 API 请求：{method.upper()} {url} "
-            f"query={clean_query} headers={display_headers}"
+            f"query={clean_query} headers={_summarize_headers(req_headers)}"
         )
 
         last_error: Exception | None = None
@@ -71,6 +56,8 @@ class BaseApiClient:
                     headers,
                 )
             except Exception as error:
+                if not _should_retry_error(error):
+                    raise EchoCaveApiError(_format_error(error)) from error
                 last_error = error
                 logger.warning(
                     f"API 请求第 {attempt + 1} 次失败 [{type(error).__name__}]: {error}\n"
@@ -93,18 +80,8 @@ class BaseApiClient:
         """使用 aiohttp 异步发送 HTTP 请求。"""
         url = f"{self.config.api_base_url}{path}"
 
-        headers = {"Accept": "application/json"}
-        auth_token = token or self.config.api_token
-        if auth_token:
-            headers["Authorization"] = f"Bearer {auth_token}"
-        if extra_headers:
-            headers.update(extra_headers)
-
-        clean_query = {}
-        if query:
-            clean_query = {
-                key: value for key, value in query.items() if value not in (None, "")
-            }
+        headers = self._build_headers(token=token, extra_headers=extra_headers)
+        clean_query = _clean_mapping(query)
 
         timeout = aiohttp.ClientTimeout(total=self.config.request_timeout)
 
@@ -124,6 +101,21 @@ class BaseApiClient:
                     )
                 response_body = await response.text()
                 return self._parse_response(response_body)
+
+    def _build_headers(
+        self,
+        *,
+        token: str | None,
+        extra_headers: dict[str, str] | None,
+    ) -> dict[str, str]:
+        """统一构建请求头，避免重复拼装逻辑。"""
+        headers = {"Accept": "application/json"}
+        auth_token = token or self.config.api_token
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+        if extra_headers:
+            headers.update(extra_headers)
+        return headers
 
     def _parse_response(self, response_body: str) -> dict[str, Any]:
         """统一解析 JSON 响应，并兼容空响应场景。"""
@@ -152,3 +144,34 @@ def _format_error(error: Exception | None) -> str:
     if type_name:
         return f"[{type_name}]"
     return "未知错误"
+
+
+def _clean_mapping(values: dict[str, Any] | None) -> dict[str, Any]:
+    """清理空查询参数，避免把空值发送给服务端。"""
+    if not values:
+        return {}
+    return {key: value for key, value in values.items() if value not in (None, "")}
+
+
+def _summarize_headers(headers: dict[str, str]) -> dict[str, str]:
+    """生成安全的请求头摘要，避免在日志中泄露敏感信息。"""
+    summary: dict[str, str] = {}
+    for key, value in headers.items():
+        lowered = key.lower()
+        if lowered in {"authorization", "x-echo-cave-token"}:
+            summary[key] = "<masked>" if value else "<empty>"
+        else:
+            summary[key] = value
+    return summary
+
+
+def _should_retry_error(error: Exception) -> bool:
+    """仅对瞬时网络错误进行重试，避免重复放大业务失败。"""
+    retryable_errors = (
+        asyncio.TimeoutError,
+        aiohttp.ClientConnectionError,
+        aiohttp.ClientOSError,
+        aiohttp.ServerTimeoutError,
+        aiohttp.ServerDisconnectedError,
+    )
+    return isinstance(error, retryable_errors)
