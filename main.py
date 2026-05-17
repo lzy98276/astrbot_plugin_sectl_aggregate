@@ -84,7 +84,8 @@ class EchoCavePlugin(Star):
                     yield _
                 return
             if action == "测试":
-                yield await self._handle_test_api(event)
+                async for _ in self._handle_test_api(event):
+                    yield _
                 return
             yield event.plain_result("未知回声洞指令，请发送：help")
         except EchoCaveApiError as error:
@@ -148,10 +149,47 @@ class EchoCavePlugin(Star):
         )
         yield event.plain_result(f"投稿成功，回声洞编号：{echo_id}")
 
-    async def _handle_view(self, event: AstrMessageEvent, echo_id: str):
-        """处理随机或指定编号查询逻辑。"""
+    async def _handle_view(self, event: AstrMessageEvent, rest: str):
+        parts = rest.strip().split()
+        if not parts:
+            async for _ in self._view_random(event):
+                yield _
+            return
+
+        mode = parts[0]
+
+        if mode.isdigit():
+            async for _ in self._view_by_id(event, mode):
+                yield _
+            return
+
+        if mode in ("最新", "列表"):
+            count = 1
+            page = 1
+            i = 1
+            while i < len(parts):
+                token = parts[i]
+                if token.isdigit():
+                    count = min(int(token), 10)
+                elif token.startswith("第") and token.endswith("页"):
+                    page_str = token[1:-1]
+                    if page_str.isdigit():
+                        page = int(page_str)
+                i += 1
+            if mode == "最新":
+                async for _ in self._view_latest(event, count, page):
+                    yield _
+            else:
+                async for _ in self._view_list(event, count, page):
+                    yield _
+            return
+
+        async for _ in self._view_by_id(event, mode):
+            yield _
+
+    async def _view_random(self, event: AstrMessageEvent):
         yield event.plain_result("正在查询回声洞，请稍候...")
-        response = await self.echo_api.get_echo(echo_id.strip() or None)
+        response = await self.echo_api.get_echo()
         if not response:
             yield event.plain_result("未找到回声洞。")
             return
@@ -160,6 +198,36 @@ class EchoCavePlugin(Star):
             self.renderer.render_echo(response),
             self.renderer.render_echo_text(response),
         )
+
+    async def _view_by_id(self, event: AstrMessageEvent, echo_id: str):
+        yield event.plain_result("正在查询回声洞，请稍候...")
+        response = await self.echo_api.get_echo(echo_id)
+        if not response:
+            yield event.plain_result(f"未找到编号为 {echo_id} 的回声洞。")
+            return
+        yield await self._html_result(
+            event,
+            self.renderer.render_echo(response),
+            self.renderer.render_echo_text(response),
+        )
+
+    async def _view_latest(self, event: AstrMessageEvent, count: int, page: int):
+        yield event.plain_result("正在查询最新回声洞，请稍候...")
+        offset = (page - 1) * count
+        echoes, total = await self.echo_api.get_echoes(mode="latest", limit=count, offset=offset)
+        if not echoes:
+            yield event.plain_result("暂无回声洞。")
+            return
+        yield event.plain_result(self._format_echo_batch("最新", echoes, total, page, count))
+
+    async def _view_list(self, event: AstrMessageEvent, count: int, page: int):
+        yield event.plain_result("正在加载回声洞列表，请稍候...")
+        offset = (page - 1) * count
+        echoes, total = await self.echo_api.get_echoes(mode="latest", limit=count, offset=offset)
+        if not echoes:
+            yield event.plain_result("暂无回声洞。")
+            return
+        yield event.plain_result(self._format_echo_batch("列表", echoes, total, page, count))
 
     async def _handle_my_echoes(self, event: AstrMessageEvent):
         """查询当前用户投稿的回声洞列表。"""

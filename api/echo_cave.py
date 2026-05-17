@@ -46,6 +46,35 @@ class EchoCaveApiClient(BaseApiClient):
             }
         return {}
 
+    async def get_echoes(
+        self,
+        *,
+        mode: str = "latest",
+        limit: int = 10,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        query: dict[str, str] = {"mode": mode, "limit": str(limit)}
+        if offset > 0:
+            query["offset"] = str(offset)
+        response = await self.request("GET", "/api/echo-cave", query=query)
+        documents = response.get("documents", [])
+        if not isinstance(documents, list):
+            documents = []
+        total = int(response.get("total", len(documents)))
+        return (
+            [
+                {
+                    "id": str(doc.get("sequence_number", "")),
+                    "content": doc.get("content", ""),
+                    "author": doc.get("author_id", "匿名"),
+                    "created_at": doc.get("created_at", ""),
+                    "document_id": doc.get("document_id", ""),
+                }
+                for doc in documents
+            ],
+            total,
+        )
+
     async def get_echo_by_sequence(self, sequence_number: str) -> dict[str, Any]:
         """通过展示编号查询，返回完整文档信息（含 document_id）。"""
         response = await self.request("GET", "/api/echo-cave", query={"id": sequence_number})
