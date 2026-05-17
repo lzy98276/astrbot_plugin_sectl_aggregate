@@ -184,13 +184,13 @@ class EchoCavePlugin(Star):
                 self.html_render(html_content, data={}, options={"full_page": True}),
                 timeout=3.0,
             )
-            yield event.image_result(image_url)
+            return event.image_result(image_url)
         except asyncio.TimeoutError:
             logger.warning("HTML 渲染超时，改用纯文本。")
-            yield event.plain_result(fallback_text)
+            return event.plain_result(fallback_text)
         except Exception as error:
             logger.warning(f"HTML 图片结果生成失败，改用纯文本：{error}")
-            yield event.plain_result(fallback_text)
+            return event.plain_result(fallback_text)
 
     async def _handle_update(self, event: AstrMessageEvent, rest: str):
         """处理编辑逻辑，要求参数包含编号和新内容。"""
@@ -245,11 +245,11 @@ class EchoCavePlugin(Star):
         """确认绑定 Key，并刷新本地绑定状态。"""
         pending = self.auth_state.get_pending(_get_user_id(event))
         if not pending:
-            yield event.plain_result("请先发送：绑定 QQ号，申请临时 Key。")
+            return event.plain_result("请先发送：绑定 QQ号，申请临时 Key。")
         response = await self.binding_api.confirm(_get_user_id(event), pending.qq, key)
         self.auth_state.set_bound(_get_user_id(event), {"qq": pending.qq})
         message = _extract_response_value(response, "message", "msg") or "QQ 绑定成功。"
-        yield event.plain_result(str(message))
+        return event.plain_result(str(message))
 
     async def _ensure_bound(self, event: AstrMessageEvent) -> bool:
         """优先使用缓存，缓存缺失时调用服务端确认绑定状态。"""
