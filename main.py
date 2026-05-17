@@ -314,6 +314,23 @@ class EchoCavePlugin(Star):
         except Exception as error:
             yield event.plain_result(f"❌ 测试过程出错\r\n地址：{url}\r\n错误：{error}")
 
+    def _format_echo_batch(
+        self, mode: str, echoes: list[dict], total: int, page: int, per_page: int
+    ) -> str:
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        lines = [f"📣 回声洞 {mode}（共 {total} 条，第 {page}/{total_pages} 页）", "━━━━━━━━━━━━━━"]
+        for echo in echoes:
+            preview = echo["content"][:60]
+            if len(echo["content"]) > 60:
+                preview += "..."
+            lines.append(f"#{echo['id']} {preview}")
+            lines.append(f"   发布者：{echo['author']} | {echo['created_at']}")
+            lines.append("")
+        if page < total_pages:
+            lines.append("━━━━━━━━━━━━━━")
+            lines.append(f"发送「回声洞 查看 {mode} 第{page + 1}页」查看更多")
+        return "\r\n".join(lines)
+
     async def _handle_bind_request(self, event: AstrMessageEvent, qq: str):
         if not _is_qq_number(qq):
             yield event.plain_result("QQ 号格式不正确，请发送：绑定 QQ号")
