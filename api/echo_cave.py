@@ -11,8 +11,10 @@ class EchoCaveApiClient(BaseApiClient):
     """提供回声洞核心资源的高层调用方法。"""
 
     async def health_check(self) -> str:
-        response = await self.request("GET", "/")
-        return str(response)[:200]
+        response = await self.request("GET", "/api/echo-cave", query={"mode": "random", "limit": "1"})
+        docs = response.get("documents", [])
+        count = len(docs) if isinstance(docs, list) else 0
+        return f"API 正常，文档总数：{response.get('total', '未知')}，返回 {count} 条"
 
     async def create_echo(
         self, content: str, *, user_id: str, token: str | None = None

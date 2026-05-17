@@ -181,7 +181,7 @@ class EchoCavePlugin(Star):
             lines.append(f"#{echo['id']} {echo['content'][:50]}{'...' if len(echo['content']) > 50 else ''}")
             lines.append(f"   时间：{echo['created_at']}")
             lines.append("")
-        yield event.plain_result("\n".join(lines))
+        yield event.plain_result("\r\n".join(lines))
 
     async def _html_result(
         self, event: AstrMessageEvent, html_content: str, fallback_text: str
@@ -202,31 +202,35 @@ class EchoCavePlugin(Star):
             return event.plain_result(fallback_text)
 
     async def _handle_update(self, event: AstrMessageEvent, rest: str):
-        """处理编辑逻辑，要求参数包含编号和新内容。"""
         echo_id, content = _split_first(rest)
         if not echo_id or not content:
             yield event.plain_result("请发送：回声洞 编辑 编号 新内容")
+            return
         if not await self._ensure_bound(event):
             yield event.plain_result("编辑前请先完成 QQ 绑定：绑定 QQ号")
+            return
         yield event.plain_result("正在查询回声洞，请稍候...")
         echo_doc = await self.echo_api.get_echo_by_sequence(echo_id)
         if not echo_doc or not echo_doc.get("document_id"):
             yield event.plain_result(f"未找到编号为 {echo_id} 的回声洞。")
+            return
         yield event.plain_result("正在更新，请稍候...")
         await self.echo_api.update_echo(echo_doc["document_id"], content, user_id=_get_user_id(event))
         yield event.plain_result(f"回声洞 #{echo_id} 已更新。")
 
     async def _handle_delete(self, event: AstrMessageEvent, echo_id: str):
-        """处理删除逻辑，要求用户已经完成绑定。"""
         echo_id = echo_id.strip()
         if not echo_id:
             yield event.plain_result("请发送：回声洞 删除 编号")
+            return
         if not await self._ensure_bound(event):
             yield event.plain_result("删除前请先完成 QQ 绑定：绑定 QQ号")
+            return
         yield event.plain_result("正在查询回声洞，请稍候...")
         echo_doc = await self.echo_api.get_echo_by_sequence(echo_id)
         if not echo_doc or not echo_doc.get("document_id"):
             yield event.plain_result(f"未找到编号为 {echo_id} 的回声洞。")
+            return
         yield event.plain_result("正在删除，请稍候...")
         await self.echo_api.delete_echo(echo_doc["document_id"], user_id=_get_user_id(event))
         yield event.plain_result(f"回声洞 #{echo_id} 已删除。")
@@ -243,9 +247,9 @@ class EchoCavePlugin(Star):
             yield event.plain_result(f"❌ 测试过程出错\r\n地址：{url}\r\n错误：{error}")
 
     async def _handle_bind_request(self, event: AstrMessageEvent, qq: str):
-        """申请绑定 Key，并缓存待确认状态。"""
         if not _is_qq_number(qq):
             yield event.plain_result("QQ 号格式不正确，请发送：绑定 QQ号")
+            return
         response = await self.binding_api.request_key(_get_user_id(event), qq)
         key = str(
             _extract_response_value(response, "temp_key", "key", "bind_key", "code")
