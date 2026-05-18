@@ -12,6 +12,7 @@ astrbot_module = types.ModuleType("astrbot")
 astrbot_api_module = types.ModuleType("astrbot.api")
 astrbot_event_module = types.ModuleType("astrbot.api.event")
 astrbot_star_module = types.ModuleType("astrbot.api.star")
+astrbot_message_components = types.ModuleType("astrbot.api.message_components")
 astrbot_api_module.logger = types.SimpleNamespace(
     info=lambda *args, **kwargs: None, warning=lambda *args, **kwargs: None
 )
@@ -22,10 +23,13 @@ astrbot_event_module.filter = types.SimpleNamespace(
 astrbot_star_module.Context = object
 astrbot_star_module.Star = object
 astrbot_star_module.register = lambda *_args, **_kwargs: lambda cls: cls
+astrbot_message_components.Node = object
+astrbot_message_components.Plain = object
 sys.modules.setdefault("astrbot", astrbot_module)
 sys.modules.setdefault("astrbot.api", astrbot_api_module)
 sys.modules.setdefault("astrbot.api.event", astrbot_event_module)
 sys.modules.setdefault("astrbot.api.star", astrbot_star_module)
+sys.modules.setdefault("astrbot.api.message_components", astrbot_message_components)
 
 import aiohttp
 
@@ -38,7 +42,7 @@ from main import (
     _is_bound_status,
     _is_qq_number,
     _normalize_command,
-    _parse_view_pagination,
+    _parse_limit,
     _split_action,
 )
 from renderer import HtmlTemplateRenderer
@@ -175,7 +179,7 @@ class CoreLogicTest(unittest.TestCase):
             cave_menu = renderer.render_menu_text()
 
         self.assertIn("回声洞指令菜单", cave_menu)
-        self.assertIn("回声洞 投稿 内容", cave_menu)
+        self.assertIn("回声洞 投稿 [内容]", cave_menu)
         self.assertIn("回声洞 查看 随机", cave_menu)
         self.assertNotIn("绑定 QQ号", cave_menu)
         self.assertNotIn("help：查看", cave_menu)
@@ -251,10 +255,12 @@ class CoreLogicTest(unittest.TestCase):
         self.assertIn("&lt;b&gt;洞&lt;/b&gt;<br>新行", html)
         self.assertNotIn("<b>洞</b>", html)
 
-    def test_parse_view_pagination_supports_count_and_page(self):
-        """校验查看指令支持数量和第N页混合解析。"""
-        self.assertEqual(_parse_view_pagination(["5", "第3页"]), (5, 3))
-        self.assertEqual(_parse_view_pagination(["页2"]), (1, 2))
+    def test_parse_limit_extracts_count(self):
+        """校验查看指令数量解析，上限 MAX_BATCH_LIMIT。"""
+        self.assertEqual(_parse_limit(["5"]), 5)
+        self.assertEqual(_parse_limit([]), 1)
+        self.assertEqual(_parse_limit(["99"]), 30)
+        self.assertEqual(_parse_limit(["abc"]), 1)
 
     def test_summarize_headers_masks_sensitive_values(self):
         """校验日志摘要不会暴露鉴权头内容。"""

@@ -14,6 +14,7 @@ from typing import AsyncGenerator
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
+from astrbot.api.message_components import Node, Plain
 
 from api.base import EchoCaveApiError
 from api.echo_cave import EchoCaveApiClient
@@ -23,7 +24,9 @@ from renderer import HtmlTemplateRenderer
 from state import AuthStateManager
 
 DEFAULT_MY_ECHO_LIMIT = 20
-VIEW_MODE_ALIASES = {"最新": "最新", "列表": "列表", "随机": "随机", "latest": "最新", "list": "列表", "random": "随机"}
+MAX_BATCH_LIMIT = 30
+MERGE_FORWARD_THRESHOLD = 3
+VIEW_MODE_ALIASES = {"最新": "最新", "随机": "随机", "latest": "最新", "random": "随机"}
 
 
 @register(
@@ -69,7 +72,7 @@ class EchoCavePlugin(Star):
 
     @filter.command("回声洞")
     async def echo_cave(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """回声洞主指令：投稿、查看（随机/编号/最新/列表）、编辑、删除、我的"""
+        """回声洞主指令：投稿、查看（随机/编号/最新）、编辑、删除、我的"""
         command_text = _normalize_command(event.message_str)
         action, rest = _split_action(command_text)
         try:
@@ -171,13 +174,10 @@ class EchoCavePlugin(Star):
                 yield _
             return
 
-        if mode in ("最新", "列表", "随机"):
-            count, page = _parse_view_pagination(parts[1:])
+        if mode in ("最新", "随机"):
+            count = _parse_limit(parts[1:])
             if mode == "最新":
-                async for _ in self._view_latest(event, count, page):
-                    yield _
-            elif mode == "列表":
-                async for _ in self._view_list(event, count, page):
+                async for _ in self._view_latest(event, count):
                     yield _
             else:
                 async for _ in self._view_random_batch(event, count):
@@ -201,14 +201,31 @@ class EchoCavePlugin(Star):
 
     async def _view_random_batch(self, event: AstrMessageEvent, count: int):
         """批量随机查看多条回声洞。"""
-        # API 文档：随机模式 limit 最大 5
-        count = min(count, 5)
+        count = min(count, MAX_BATCH_LIMIT)
         yield event.plain_result("正在随机查询回声洞，请稍候...")
-        echoes, total = await self.echo_api.get_echoes(mode="random", limit=count, offset=0)
+        echoes, total = await self.echo_api.get_echoes(mode="random", limit=count)
         if not echoes:
             yield event.plain_result("未找到回声洞。")
             return
-        yield event.plain_result(self._format_echo_batch("随机", echoes, total, 1, count))
+        if count > MERGE_FORWARD_THRESHOLD:
+            yield await self._build_merge_forward(event, echoes)
+        else:
+            yield event.plain_result(self._format_echo_batch("随机", echoes, total))
+
+    async def _build_merge_forward(self, event: AstrMessageEvent, echoes: list[dict]) -> str:
+        """将多条回声洞构建为合并转发 Node 列表。
+        
+        仅 OneBot v11 平台支持，其他平台会降级为普通文本。
+        """
+        nodes = []
+        for echo in echoes:
+            text = self._format_echo_batch("", [echo], 0)
+            nodes.append(Node(
+                uin=1352082231,
+                name=f"回声洞 #{echo['id']}",
+                content=[Plain(text.strip())],
+            ))
+        return event.chain_result(nodes)
 
     async def _view_by_id(self, event: AstrMessageEvent, echo_id: str):
         yield event.plain_result("正在查询回声洞，请稍候...")
@@ -222,23 +239,14 @@ class EchoCavePlugin(Star):
             self.renderer.render_echo_text(response),
         )
 
-    async def _view_latest(self, event: AstrMessageEvent, count: int, page: int):
+    async def _view_latest(self, event: AstrMessageEvent, count: int):
+        count = min(count, MAX_BATCH_LIMIT)
         yield event.plain_result("正在查询最新回声洞，请稍候...")
-        offset = (page - 1) * count
-        echoes, total = await self.echo_api.get_echoes(mode="latest", limit=count, offset=offset)
+        echoes, total = await self.echo_api.get_echoes(mode="latest", limit=count)
         if not echoes:
             yield event.plain_result("暂无回声洞。")
             return
-        yield event.plain_result(self._format_echo_batch("最新", echoes, total, page, count))
-
-    async def _view_list(self, event: AstrMessageEvent, count: int, page: int):
-        yield event.plain_result("正在加载回声洞列表，请稍候...")
-        offset = (page - 1) * count
-        echoes, total = await self.echo_api.get_echoes(mode="latest", limit=count, offset=offset)
-        if not echoes:
-            yield event.plain_result("暂无回声洞。")
-            return
-        yield event.plain_result(self._format_echo_batch("列表", echoes, total, page, count))
+        yield event.plain_result(self._format_echo_batch("最新", echoes, total))
 
     async def _handle_my_echoes(self, event: AstrMessageEvent):
         """查询当前用户投稿的回声洞列表。"""
@@ -317,10 +325,14 @@ class EchoCavePlugin(Star):
         yield event.plain_result(f"回声洞 #{echo_id} 已删除。")
 
     def _format_echo_batch(
-        self, mode: str, echoes: list[dict], total: int, page: int, per_page: int
+        self, mode: str, echoes: list[dict], total: int
     ) -> str:
-        total_pages = max(1, (total + per_page - 1) // per_page)
-        lines = [f"📣 回声洞 {mode}（共 {total} 条，第 {page}/{total_pages} 页）", "━━━━━━━━━━━━━━"]
+        if not mode:
+            return "\r\n".join(
+                f"#{echo['id']} {echo['content']}\r\n发布者：{echo['author']} | {echo['created_at']}"
+                for echo in echoes
+            )
+        lines = [f"📣 回声洞 {mode}（共 {total} 条）", "━━━━━━━━━━━━━━"]
         for echo in echoes:
             preview = echo["content"][:60]
             if len(echo["content"]) > 60:
@@ -328,9 +340,6 @@ class EchoCavePlugin(Star):
             lines.append(f"#{echo['id']} {preview}")
             lines.append(f"   发布者：{echo['author']} | {echo['created_at']}")
             lines.append("")
-        if page < total_pages:
-            lines.append("━━━━━━━━━━━━━━")
-            lines.append(f"发送「回声洞 查看 {mode} 第{page + 1}页」查看更多")
         return "\r\n".join(lines)
 
     async def _handle_bind_confirm(self, event: AstrMessageEvent, key: str) -> str:
@@ -392,7 +401,7 @@ class EchoCavePlugin(Star):
             self.auth_state.set_bound(user_id, {"qq": qq})
             return f"当前账号已绑定 QQ：{qq}"
         self.auth_state.clear_bound(user_id)
-        return "当前账号尚未绑定 QQ"
+        return "当前QQ尚未绑定思拓创联账号"
 
     async def terminate(self):
         """插件卸载时记录资源清理日志。"""
@@ -420,20 +429,12 @@ def _split_first(text: str) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
-def _parse_view_pagination(tokens: list[str]) -> tuple[int, int]:
-    """解析最新/列表指令中的数量和页码参数。"""
-    count = 1
-    page = 1
+def _parse_limit(tokens: list[str]) -> int:
+    """解析查看指令中的数量参数，上限 MAX_BATCH_LIMIT。"""
     for token in tokens:
         if token.isdigit():
-            count = min(max(int(token), 1), 10)
-            continue
-        normalized_token = token.removeprefix("页").removesuffix("页")
-        if normalized_token.startswith("第"):
-            normalized_token = normalized_token[1:]
-        if normalized_token.isdigit():
-            page = max(int(normalized_token), 1)
-    return count, page
+            return min(max(int(token), 1), MAX_BATCH_LIMIT)
+    return 1
 
 
 def _get_user_id(event: AstrMessageEvent) -> str:

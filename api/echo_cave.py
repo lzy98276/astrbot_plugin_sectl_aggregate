@@ -2,9 +2,29 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from api.base import BaseApiClient, EchoCaveApiError
+
+
+def _format_utc8(iso_string: str) -> str:
+    """将 ISO8601 UTC 时间字符串转换为 UTC+8 可读格式。
+    
+    传入空字符串或无效格式时原样返回。
+    """
+    if not iso_string:
+        return iso_string
+    try:
+        if iso_string.endswith("Z"):
+            iso_string = iso_string[:-1] + "+00:00"
+        dt = datetime.fromisoformat(iso_string)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt_utc8 = dt.astimezone(timezone(timedelta(hours=8)))
+        return dt_utc8.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return iso_string
 
 
 class EchoCaveApiClient(BaseApiClient):
@@ -57,14 +77,11 @@ class EchoCaveApiClient(BaseApiClient):
         *,
         mode: str = "latest",
         limit: int = 10,
-        offset: int = 0,
     ) -> tuple[list[dict[str, Any]], int]:
         query: dict[str, str] = {"limit": str(limit)}
         # API 文档中 `mode` 仅支持 "random"，其他模式不传参让 API 使用默认行为
         if mode == "random":
             query["mode"] = "random"
-        if offset > 0:
-            query["offset"] = str(offset)
         response = await self.request("GET", "/api/echo-cave", query=query)
         documents = response.get("documents", [])
         if not isinstance(documents, list):
@@ -150,6 +167,6 @@ def _normalize_echo_document(doc: dict[str, Any]) -> dict[str, Any]:
         "id": str(doc.get("sequence_number", "")),
         "content": doc.get("content", ""),
         "author": doc.get("author_name") or doc.get("author_id", "匿名"),
-        "created_at": doc.get("created_at", ""),
+        "created_at": _format_utc8(doc.get("created_at", "")),
         "document_id": doc.get("document_id", ""),
     }
