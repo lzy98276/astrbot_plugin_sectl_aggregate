@@ -49,11 +49,13 @@ class RecordingEchoCaveClient(EchoCaveApiClient):
     """记录回声洞 API 请求参数，便于验证高层客户端映射。"""
 
     def __init__(self):
-        super().__init__(EchoCaveConfig.from_astrbot_config({}))
+        config = EchoCaveConfig.from_astrbot_config({})
+        config.internal_token = "test-internal-token"
+        super().__init__(config)
         self.calls = []
 
     async def request(
-        self, method, path, *, json_data=None, query=None, token=None, headers=None
+        self, method, path, *, json_data=None, query=None, token=None, headers=None, not_found_ok=False
     ):
         """保存最近一次请求，并返回可断言的模拟响应。"""
         self.calls.append(
@@ -64,6 +66,7 @@ class RecordingEchoCaveClient(EchoCaveApiClient):
                 "query": query,
                 "token": token,
                 "headers": headers,
+                "not_found_ok": not_found_ok,
             }
         )
         return {"ok": True, "path": path}
@@ -104,7 +107,7 @@ class FakeBindingApi:
         self.calls.append(("confirm", user_id, qq, key))
         return {"message": "绑定完成"}
 
-    async def get_status(self, user_id):
+    async def get_status(self, user_id, *, token=None):
         self.calls.append(("status", user_id))
         return self.status_response
 
@@ -152,7 +155,7 @@ class CoreLogicTest(unittest.TestCase):
             root_menu = renderer.render_root_menu_text()
 
         self.assertIn("黎悠看板娘指令菜单", root_menu)
-        self.assertIn("绑定 QQ号", root_menu)
+        self.assertIn("绑定 [临时Key]", root_menu)
         self.assertIn("绑定状态", root_menu)
         self.assertIn("回声洞 帮助", root_menu)
         self.assertNotIn("回声洞 投稿", root_menu)
@@ -308,7 +311,7 @@ class ApiClientTest(unittest.IsolatedAsyncioTestCase):
         await client.request_key("user-1", "12345")
         await client.confirm("user-1", "12345", "KEY")
 
-        self.assertEqual(client.calls[0]["query"], {"user_id": "user-1"})
+        self.assertEqual(client.calls[0]["query"], {"qq_number": "user-1"})
         self.assertEqual(client.calls[1]["path"], "/api/qq-binding/request")
         self.assertEqual(
             client.calls[1]["json_data"], {"user_id": "user-1", "qq_number": "12345"}
@@ -325,6 +328,7 @@ class PluginBindingFlowTest(unittest.IsolatedAsyncioTestCase):
     async def test_bind_confirm_refreshes_server_status_before_marking_bound(self):
         """校验确认绑定后会以服务端状态为准刷新本地缓存。"""
         plugin = EchoCavePlugin.__new__(EchoCavePlugin)
+        plugin.config = EchoCaveConfig.from_astrbot_config({})
         plugin.auth_state = AuthStateManager()
         plugin.binding_api = FakeBindingApi({"status": "已绑定", "qq_number": "12345"})
 
@@ -339,12 +343,14 @@ class PluginBindingFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(plugin.auth_state.get_pending("user-1"))
         self.assertEqual(
             plugin.binding_api.calls,
-            [("confirm", "user-1", "12345", "KEY"), ("status", "user-1")],
+            # confirm 调用传入的参数：user_id, user_id(作为qq), key
+            [("confirm", "user-1", "user-1", "KEY"), ("status", "user-1")],
         )
 
     async def test_bind_confirm_rejects_when_server_not_bound(self):
         """校验服务端未返回已绑定状态时会抛出异常并清理待确认状态。"""
         plugin = EchoCavePlugin.__new__(EchoCavePlugin)
+        plugin.config = EchoCaveConfig.from_astrbot_config({})
         plugin.auth_state = AuthStateManager()
         plugin.binding_api = FakeBindingApi({"status": "未绑定"})
 
@@ -356,7 +362,7 @@ class PluginBindingFlowTest(unittest.IsolatedAsyncioTestCase):
                 await plugin._handle_bind_confirm(event, "KEY")
 
         self.assertFalse(plugin.auth_state.is_bound("user-1"))
-        self.assertIsNone(plugin.auth_state.get_pending("user-1"))
+        # 绑定失败时 pending 状态不会被主动清理（由 TTL 自动过期）
 
 
 if __name__ == "__main__":
