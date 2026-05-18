@@ -139,7 +139,11 @@ def _normalize_echo_data(echo_data: dict[str, Any]) -> dict[str, str]:
         ),
         "content": str(data.get("content") or data.get("text") or "暂无内容"),
         "author": str(
-            data.get("author") or data.get("author_id") or data.get("user_id") or "匿名"
+            data.get("author_name")
+            or data.get("author")
+            or data.get("author_id")
+            or data.get("user_id")
+            or "匿名"
         ),
         "created_at": str(data.get("created_at") or data.get("time") or "未知"),
     }

@@ -201,6 +201,8 @@ class EchoCavePlugin(Star):
 
     async def _view_random_batch(self, event: AstrMessageEvent, count: int):
         """批量随机查看多条回声洞。"""
+        # API 文档：随机模式 limit 最大 5
+        count = min(count, 5)
         yield event.plain_result("正在随机查询回声洞，请稍候...")
         echoes, total = await self.echo_api.get_echoes(mode="random", limit=count, offset=0)
         if not echoes:
