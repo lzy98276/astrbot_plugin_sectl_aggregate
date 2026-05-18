@@ -128,8 +128,9 @@ class EchoCavePlugin(Star):
     async def binding_status(self, event: AstrMessageEvent) -> AsyncGenerator:
         """查看当前 QQ 绑定状态"""
         try:
+            qq_number = _get_user_id(event)
             status = await self.binding_api.get_status(
-                _get_user_id(event), token=self.config.api_token or None
+                qq_number, token=self.config.api_token or None
             )
             yield event.plain_result(self._format_binding_status(event, status))
         except EchoCaveApiError as error:
@@ -339,6 +340,12 @@ class EchoCavePlugin(Star):
         status = await self.binding_api.get_status(
             user_id, token=self.config.api_token or None
         )
+        if _is_bound_status(status):
+            qq = str(_extract_response_value(status, "qq_number", "qq") or user_id)
+            self.auth_state.set_bound(user_id, {"qq": qq})
+        else:
+            raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
+        return str(_extract_response_value(response, "message", "msg") or "QQ 绑定成功。")
         if _is_bound_status(status):
             qq = str(_extract_response_value(status, "qq_number", "qq") or user_id)
             self.auth_state.set_bound(user_id, {"qq": qq})
