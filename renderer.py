@@ -19,8 +19,7 @@ class HtmlTemplateRenderer:
         commands = [
             {"name": "help", "desc": "查看帮助菜单"},
             {"name": "回声洞 帮助", "desc": "查看回声洞专属帮助菜单"},
-            {"name": "绑定 QQ号", "desc": "申请 QQ 绑定 Key"},
-            {"name": "绑定 临时Key", "desc": "完成 QQ 绑定确认"},
+            {"name": "绑定 临时Key", "desc": "使用 Key 完成 QQ 绑定"},
             {"name": "绑定状态", "desc": "查看当前账号 QQ 绑定状态"},
         ]
         items = "".join(
@@ -76,8 +75,7 @@ class HtmlTemplateRenderer:
                 "📣 黎悠看板娘指令菜单",
                 "help：查看帮助菜单",
                 "回声洞 帮助：查看回声洞帮助菜单",
-                "绑定 QQ号：申请 QQ 绑定 Key",
-                "绑定 临时Key：完成 QQ 绑定确认",
+                "绑定 临时Key：使用 Key 完成 QQ 绑定",
                 "绑定状态：查看绑定状态",
             ]
         )

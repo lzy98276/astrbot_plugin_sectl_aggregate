@@ -109,20 +109,14 @@ class EchoCavePlugin(Star):
 
     @filter.command("绑定")
     async def bind_qq(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """申请 QQ 绑定 Key 或确认绑定，格式：绑定 QQ号 / 绑定 Key"""
+        """确认绑定，格式：绑定 临时Key"""
         command_text = _normalize_command(event.message_str)
         argument = command_text.removeprefix("绑定").strip()
         try:
             if not argument:
-                yield event.plain_result("请发送：绑定 QQ号，用于申请 QQ 绑定 Key。")
+                yield event.plain_result("请发送：绑定 临时Key")
                 return
-            if self.auth_state.get_pending(_get_user_id(event)) and not _is_qq_number(
-                argument
-            ):
-                yield await self._handle_bind_confirm(event, argument)
-                return
-            async for _ in self._handle_bind_request(event, argument):
-                yield _
+            yield event.plain_result(await self._handle_bind_confirm(event, argument))
         except EchoCaveApiError as error:
             logger.warning(f"QQ 绑定 API 调用失败：{error}")
             yield event.plain_result(f"绑定失败：{error}")
@@ -337,43 +331,20 @@ class EchoCavePlugin(Star):
             lines.append(f"发送「回声洞 查看 {mode} 第{page + 1}页」查看更多")
         return "\r\n".join(lines)
 
-    async def _handle_bind_request(self, event: AstrMessageEvent, qq: str):
-        if not _is_qq_number(qq):
-            yield event.plain_result("QQ 号格式不正确，请发送：绑定 QQ号")
-            return
-        response = await self.binding_api.request_key(_get_user_id(event), qq)
-        key = str(
-            _extract_response_value(response, "temp_key", "key", "bind_key", "code")
-            or ""
-        )
-        if key:
-            self.auth_state.set_pending(_get_user_id(event), qq, key)
-        message = (
-            _extract_response_value(response, "message", "msg")
-            or "绑定 Key 已生成，请按服务端提示完成确认。"
-        )
-        if key:
-            message = f"{message}\n绑定 Key：{key}\n完成验证后发送：绑定 {key}"
-        yield event.plain_result(str(message))
-
-    async def _handle_bind_confirm(self, event: AstrMessageEvent, key: str):
+    async def _handle_bind_confirm(self, event: AstrMessageEvent, key: str) -> str:
         """确认绑定 Key，并刷新本地绑定状态。"""
         user_id = _get_user_id(event)
-        pending = self.auth_state.get_pending(user_id)
-        if not pending:
-            return event.plain_result("请先发送：绑定 QQ号，申请临时 Key。")
-        response = await self.binding_api.confirm(user_id, pending.qq, key)
+        # 在 QQ 平台上下文中，sender_id 即为 QQ 号
+        response = await self.binding_api.confirm(user_id, user_id, key)
         status = await self.binding_api.get_status(
             user_id, token=self.config.api_token or None
         )
         if _is_bound_status(status):
-            qq = str(_extract_response_value(status, "qq_number", "qq") or pending.qq)
+            qq = str(_extract_response_value(status, "qq_number", "qq") or user_id)
             self.auth_state.set_bound(user_id, {"qq": qq})
         else:
-            self.auth_state.clear_pending(user_id)
             raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
-        message = _extract_response_value(response, "message", "msg") or "QQ 绑定成功。"
-        return event.plain_result(str(message))
+        return str(_extract_response_value(response, "message", "msg") or "QQ 绑定成功。")
 
     async def _ensure_bound(self, event: AstrMessageEvent) -> bool:
         """优先使用缓存，缓存缺失时调用服务端确认绑定状态。
@@ -413,10 +384,7 @@ class EchoCavePlugin(Star):
             self.auth_state.set_bound(user_id, {"qq": qq})
             return f"当前账号已绑定 QQ：{qq}"
         self.auth_state.clear_bound(user_id)
-        pending = self.auth_state.get_pending(user_id)
-        if pending:
-            return f"当前账号未完成绑定，待确认 QQ：{pending.qq}。请发送：绑定 {pending.key}"
-        return "当前账号尚未绑定 QQ，请发送：绑定 QQ号"
+        return "当前账号尚未绑定 QQ"
 
     async def terminate(self):
         """插件卸载时记录资源清理日志。"""
