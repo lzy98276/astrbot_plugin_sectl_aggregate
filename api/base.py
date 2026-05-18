@@ -31,8 +31,13 @@ class BaseApiClient:
         query: dict[str, Any] | None = None,
         token: str | None = None,
         headers: dict[str, str] | None = None,
+        not_found_ok: bool = False,
     ) -> dict[str, Any]:
-        """异步执行请求，并对瞬时网络错误进行有限重试。"""
+        """异步执行请求，并对瞬时网络错误进行有限重试。
+
+        ``not_found_ok`` 为 ``True`` 时，服务端返回 404 不会抛出异常，
+        而是返回空 ``dict``，适用于"未找到"属于正常业务状态的查询场景。
+        """
         import logging
         logger = logging.getLogger("astrbot")
 
@@ -54,6 +59,7 @@ class BaseApiClient:
                     query,
                     token,
                     headers,
+                    not_found_ok=not_found_ok,
                 )
             except Exception as error:
                 if not _should_retry_error(error):
@@ -76,12 +82,15 @@ class BaseApiClient:
         query: dict[str, Any] | None,
         token: str | None,
         extra_headers: dict[str, str] | None,
+        not_found_ok: bool = False,
     ) -> dict[str, Any]:
         """使用 aiohttp 异步发送 HTTP 请求。"""
         url = f"{self.config.api_base_url}{path}"
 
         headers = self._build_headers(token=token, extra_headers=extra_headers)
         clean_query = _clean_mapping(query)
+
+        
 
         timeout = aiohttp.ClientTimeout(total=self.config.request_timeout)
 
@@ -94,6 +103,8 @@ class BaseApiClient:
                 headers=headers,
             ) as response:
                 if response.status >= 400:
+                    if response.status == 404 and not_found_ok:
+                        return {}
                     body = await response.text()
                     error_msg = (
                         f"HTTP {response.status} {response.reason or ''} "

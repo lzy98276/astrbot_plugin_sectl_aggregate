@@ -40,9 +40,16 @@ class EchoCaveApiClient(BaseApiClient):
         )
 
     async def get_echo(self, echo_id: str | None = None) -> dict[str, Any]:
-        """查询随机或指定编号的回声洞内容，返回单条文档。"""
+        """查询随机或指定编号的回声洞内容，返回单条文档。
+
+        按编号查询时若服务端返回 404（不存在），返回空 ``dict``，
+        由调用方通过 ``if not response:`` 判断。
+        """
         query = {"id": echo_id} if echo_id else {"mode": "random", "limit": 1}
-        response = await self.request("GET", "/api/echo-cave", query=query)
+        not_found_ok = bool(echo_id)
+        response = await self.request(
+            "GET", "/api/echo-cave", query=query, not_found_ok=not_found_ok
+        )
         return _first_echo_document(response)
 
     async def get_echoes(
@@ -52,7 +59,10 @@ class EchoCaveApiClient(BaseApiClient):
         limit: int = 10,
         offset: int = 0,
     ) -> tuple[list[dict[str, Any]], int]:
-        query: dict[str, str] = {"mode": mode, "limit": str(limit)}
+        query: dict[str, str] = {"limit": str(limit)}
+        # API 文档中 `mode` 仅支持 "random"，其他模式不传参让 API 使用默认行为
+        if mode == "random":
+            query["mode"] = "random"
         if offset > 0:
             query["offset"] = str(offset)
         response = await self.request("GET", "/api/echo-cave", query=query)
@@ -69,9 +79,12 @@ class EchoCaveApiClient(BaseApiClient):
         )
 
     async def get_echo_by_sequence(self, sequence_number: str) -> dict[str, Any]:
-        """通过展示编号查询，返回完整文档信息（含 document_id）。"""
+        """通过展示编号查询，返回完整文档信息（含 document_id）。
+
+        不存在时返回空 ``dict``，由调用方通过 ``if not response:`` 判断。
+        """
         response = await self.request(
-            "GET", "/api/echo-cave", query={"id": sequence_number}
+            "GET", "/api/echo-cave", query={"id": sequence_number}, not_found_ok=True
         )
         return _first_echo_document(response)
 
@@ -128,11 +141,15 @@ def _first_echo_document(response: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_echo_document(doc: dict[str, Any]) -> dict[str, Any]:
-    """统一回声洞文档字段，减少各接口重复映射逻辑。"""
+    """统一回声洞文档字段，减少各接口重复映射逻辑。
+
+    API 响应中 ``author_name`` 为平台显示名称（如用户名），
+    ``author_id`` 为内部 Appwrite 文档 ID，显示时优先使用 ``author_name``。
+    """
     return {
         "id": str(doc.get("sequence_number", "")),
         "content": doc.get("content", ""),
-        "author": doc.get("author_id", "匿名"),
+        "author": doc.get("author_name") or doc.get("author_id", "匿名"),
         "created_at": doc.get("created_at", ""),
         "document_id": doc.get("document_id", ""),
     }
