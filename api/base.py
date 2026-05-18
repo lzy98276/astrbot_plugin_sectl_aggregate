@@ -106,10 +106,16 @@ class BaseApiClient:
                     if response.status == 404 and not_found_ok:
                         return {}
                     body = await response.text()
-                    error_msg = (
-                        f"HTTP {response.status} {response.reason or ''} "
-                        f"from {method.upper()} {url}: {body[:200]}"
-                    )
+                    error_descriptions = _extract_error_descriptions(body)
+                    if error_descriptions:
+                        error_msg = (
+                            f"HTTP {response.status} {_join_error_descriptions(error_descriptions)}"
+                        )
+                    else:
+                        error_msg = (
+                            f"HTTP {response.status} {response.reason or ''} "
+                            f"from {method.upper()} {url}: {body[:200]}"
+                        )
                     if response.status == 401:
                         error_msg += (
                             "。请检查插件配置中的 api_token 是否已填写有效的 "
@@ -125,9 +131,16 @@ class BaseApiClient:
         token: str | None,
         extra_headers: dict[str, str] | None,
     ) -> dict[str, str]:
-        """统一构建请求头，避免重复拼装逻辑。"""
+        """统一构建请求头，避免重复拼装逻辑。
+
+        ``token`` 为 ``None`` 时使用配置中的 ``api_token``；
+        传空字符串 ``""`` 表示**显式跳过认证头**（用于无需认证的端点）。
+        """
         headers = {"Accept": "application/json"}
-        auth_token = token or self.config.api_token
+        if token is not None:
+            auth_token = token
+        else:
+            auth_token = self.config.api_token
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
         if extra_headers:
@@ -192,3 +205,34 @@ def _should_retry_error(error: Exception) -> bool:
         aiohttp.ServerDisconnectedError,
     )
     return isinstance(error, retryable_errors)
+
+
+def _extract_error_descriptions(body: str) -> list[str]:
+    """尝试从 API 错误响应 JSON 中提取用户友好的错误描述。
+
+    优先取 ``error_description``，其次取 ``message``，最后取 ``error``。
+    非 JSON 或无法解析时返回空列表。
+    """
+    try:
+        data = _json.loads(body)
+    except _json.JSONDecodeError:
+        return []
+    if not isinstance(data, dict):
+        return []
+    description = data.get("error_description")
+    if description and isinstance(description, str) and description.strip():
+        return [description.strip()]
+    message = data.get("message")
+    if message and isinstance(message, str) and message.strip():
+        return [message.strip()]
+    error = data.get("error")
+    if error and isinstance(error, str) and error.strip():
+        return [error.strip()]
+    return []
+
+
+def _join_error_descriptions(descriptions: list[str]) -> str:
+    """将错误描述列表拼接为错误消息后缀。"""
+    if not descriptions:
+        return ""
+    return " - " + " | ".join(descriptions)

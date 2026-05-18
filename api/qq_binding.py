@@ -30,9 +30,13 @@ class QqBindingApiClient(BaseApiClient):
         )
 
     async def confirm(self, user_id: str, qq: str, key: str) -> dict[str, Any]:
-        """使用临时 Key 确认 QQ 绑定。"""
+        """使用临时 Key 确认 QQ 绑定。
+
+        API 文档标注该接口无需认证，显式跳过 Auth 头避免干扰。
+        """
         return await self.request(
             "POST",
             "/api/qq-binding/confirm",
             json_data={"user_id": user_id, "qq_number": qq, "temp_key": key},
+            token="",
         )
