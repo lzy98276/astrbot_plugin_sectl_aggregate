@@ -55,8 +55,7 @@ class EchoCavePlugin(Star):
                 "📣 黎悠看板娘指令菜单\r\n"
                 "help：查看帮助菜单\r\n"
                 "回声洞 帮助：查看回声洞帮助菜单\r\n"
-                "绑定 QQ号：申请 QQ 绑定 Key\r\n"
-                "绑定 临时Key：完成 QQ 绑定确认\r\n"
+                "绑定 [临时Key]：使用 Key 完成 QQ 绑定\r\n"
                 "绑定状态：查看绑定状态"
             )
         try:
@@ -109,12 +108,12 @@ class EchoCavePlugin(Star):
 
     @filter.command("绑定")
     async def bind_qq(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """确认绑定，格式：绑定 临时Key"""
+        """确认绑定，格式：绑定 [临时Key]"""
         command_text = _normalize_command(event.message_str)
         argument = command_text.removeprefix("绑定").strip()
         try:
             if not argument:
-                yield event.plain_result("请发送：绑定 临时Key")
+                yield event.plain_result("请发送：绑定 [临时Key]")
                 return
             yield event.plain_result(await self._handle_bind_confirm(event, argument))
         except EchoCaveApiError as error:
