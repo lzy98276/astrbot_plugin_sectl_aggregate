@@ -15,14 +15,14 @@ class HtmlTemplateRenderer:
         self.template_dir = template_dir
 
     def render_root_menu(self) -> str:
-        """渲染根目录帮助菜单 HTML（无回声洞/hub前缀的指令）。"""
+        """渲染根目录帮助菜单 HTML。"""
         commands = [
-            {"name": "help", "desc": "查看帮助菜单"},
-            {"name": "回声洞 帮助", "desc": "查看回声洞专属帮助菜单"},
-            {"name": "hub 帮助", "desc": "查看 Hub 内容中心帮助菜单"},
-            {"name": "绑定 [临时Key]", "desc": "使用 Key 完成 QQ 绑定"},
-            {"name": "解绑", "desc": "解绑当前 QQ 账号"},
-            {"name": "绑定状态", "desc": "查看当前账号 QQ 绑定状态"},
+            {"name": "/help", "desc": "查看帮助菜单"},
+            {"name": "/回声洞 帮助", "desc": "查看回声洞专属帮助菜单"},
+            {"name": "/hub 帮助", "desc": "查看 Hub 内容中心帮助菜单"},
+            {"name": "/绑定 [临时Key]", "desc": "使用 Key 完成 QQ 绑定"},
+            {"name": "/解绑", "desc": "解绑当前 QQ 账号"},
+            {"name": "/绑定状态", "desc": "查看当前账号 QQ 绑定状态"},
         ]
         items = "".join(
             f"<li><strong>{html.escape(item['name'])}</strong><span>{html.escape(item['desc'])}</span></li>"
@@ -31,21 +31,21 @@ class HtmlTemplateRenderer:
         return self._render("menu.html", {"commands": items})
 
     def render_menu(self) -> str:
-        """渲染回声洞帮助菜单 HTML（带回声洞前缀的指令）。"""
+        """渲染回声洞帮助菜单 HTML。"""
         commands = [
             {
-                "name": "回声洞 投稿 [内容]",
+                "name": "/回声洞 投稿 [内容]",
                 "desc": "投稿一条新的回声洞，需要先完成 QQ 绑定",
             },
-            {"name": "回声洞 查看 随机 [数量]", "desc": "随机查看多条回声洞（最多30条）"},
-            {"name": "回声洞 查看 [编号]", "desc": "按编号查看单条回声洞"},
+            {"name": "/回声洞 查看 随机 [数量]", "desc": "随机查看多条回声洞（最多30条）"},
+            {"name": "/回声洞 查看 [编号]", "desc": "按编号查看单条回声洞"},
             {
-                "name": "回声洞 查看 最新 [数量]",
+                "name": "/回声洞 查看 最新 [数量]",
                 "desc": "查看最新 N 条（最多30条）",
             },
-            {"name": "回声洞 我的", "desc": "查看自己投稿的回声洞列表"},
-            {"name": "回声洞 编辑 [编号] [新内容]", "desc": "编辑自己发布的回声洞"},
-            {"name": "回声洞 删除 [编号]", "desc": "删除自己发布的回声洞"},
+            {"name": "/回声洞 我的", "desc": "查看自己投稿的回声洞列表"},
+            {"name": "/回声洞 编辑 [编号] [新内容]", "desc": "编辑自己发布的回声洞"},
+            {"name": "/回声洞 删除 [编号]", "desc": "删除自己发布的回声洞"},
         ]
         items = "".join(
             f"<li><strong>{html.escape(item['name'])}</strong><span>{html.escape(item['desc'])}</span></li>"
@@ -71,12 +71,12 @@ class HtmlTemplateRenderer:
         return "\r\n".join(
             [
                 "📣 黎悠看板娘指令菜单",
-                "help：查看帮助菜单",
-                "回声洞 帮助：查看回声洞帮助菜单",
-                "hub 帮助：查看 Hub 内容中心帮助菜单",
-                "绑定 [临时Key]：使用 Key 完成 QQ 绑定",
-                "解绑：解绑当前 QQ 账号",
-                "绑定状态：查看绑定状态",
+                "/help：查看帮助菜单",
+                "/回声洞 帮助：查看回声洞帮助菜单",
+                "/hub 帮助：查看 Hub 内容中心帮助菜单",
+                "/绑定 [临时Key]：使用 Key 完成 QQ 绑定",
+                "/解绑：解绑当前 QQ 账号",
+                "/绑定状态：查看绑定状态",
             ]
         )
 
@@ -85,13 +85,13 @@ class HtmlTemplateRenderer:
         return "\r\n".join(
             [
                 "📣 回声洞指令列表",
-                "回声洞 投稿 [内容]：投稿回声洞（需绑定 QQ）",
-                "回声洞 查看 随机 [数量]：随机查看多条",
-                "回声洞 查看 [编号]：按编号查看",
-                "回声洞 查看 最新 [数量]：查看最新",
-                "回声洞 我的：查看自己投稿的列表",
-                "回声洞 编辑 [编号] [新内容]：编辑自己的回声洞",
-                "回声洞 删除 [编号]：删除自己的回声洞",
+                "/回声洞 投稿 [内容]：投稿回声洞（需绑定 QQ）",
+                "/回声洞 查看 随机 [数量]：随机查看多条",
+                "/回声洞 查看 [编号]：按编号查看",
+                "/回声洞 查看 最新 [数量]：查看最新",
+                "/回声洞 我的：查看自己投稿的列表",
+                "/回声洞 编辑 [编号] [新内容]：编辑自己的回声洞",
+                "/回声洞 删除 [编号]：删除自己的回声洞",
             ]
         )
 
@@ -99,17 +99,16 @@ class HtmlTemplateRenderer:
         """渲染 Hub 内容中心帮助菜单 HTML。"""
         commands = [
             {
-                "name": "hub 投稿 [标题] | [描述]",
+                "name": "/hub 投稿 [标题] | [描述]",
                 "desc": "投稿 Hub 内容，需要先完成 QQ 绑定",
             },
-            {"name": "hub 查看 随机 [数量]", "desc": "随机查看多条 Hub 内容（最多30条）"},
-            {"name": "hub 查看 [编号]", "desc": "按编号查看单条 Hub 内容"},
-            {"name": "hub 查看 最新 [数量]", "desc": "查看最新 N 条（最多30条）"},
-            {"name": "hub 我的", "desc": "查看自己投稿的 Hub 列表"},
-            {"name": "hub 搜索 [关键词]", "desc": "搜索 Hub 内容"},
-            {"name": "hub 标签", "desc": "查看可用标签列表"},
-            {"name": "hub 编辑 [编号] [新标题] | [新描述]", "desc": "编辑自己的 Hub 内容"},
-            {"name": "hub 删除 [编号]", "desc": "删除自己的 Hub 内容"},
+            {"name": "/hub 查看 [编号]", "desc": "按编号查看单条 Hub 内容（附带图片）"},
+            {"name": "/hub 查看 随机", "desc": "随机查看一条 Hub 内容（附带图片）"},
+            {"name": "/hub 查看 最新", "desc": "查看最新一条 Hub 内容（附带图片）"},
+            {"name": "/hub 搜索 [关键词]", "desc": "搜索 Hub 内容"},
+            {"name": "/hub 标签", "desc": "查看可用标签列表"},
+            {"name": "/hub 编辑 [编号] [新标题] | [新描述]", "desc": "编辑自己的 Hub 内容"},
+            {"name": "/hub 删除 [编号]", "desc": "删除自己的 Hub 内容"},
         ]
         items = "".join(
             f"<li><strong>{html.escape(item['name'])}</strong><span>{html.escape(item['desc'])}</span></li>"
@@ -122,15 +121,14 @@ class HtmlTemplateRenderer:
         return "\r\n".join(
             [
                 "📣 Hub 内容中心指令列表",
-                "hub 投稿 [标题] | [描述]：投稿 Hub（需绑定 QQ）",
-                "hub 查看 随机 [数量]：随机查看多条",
-                "hub 查看 [编号]：按编号查看",
-                "hub 查看 最新 [数量]：查看最新",
-                "hub 我的：查看自己投稿的列表",
-                "hub 搜索 [关键词]：搜索 Hub 内容",
-                "hub 标签：查看可用标签",
-                "hub 编辑 [编号] [新标题] | [新描述]：编辑自己的 Hub",
-                "hub 删除 [编号]：删除自己的 Hub",
+                "/hub 投稿 [标题] | [描述]：投稿 Hub（需绑定 QQ）",
+                "/hub 查看 [编号]：按编号查看（附带图片）",
+                "/hub 查看 随机：随机查看一条（附带图片）",
+                "/hub 查看 最新：查看最新一条（附带图片）",
+                "/hub 搜索 [关键词]：搜索 Hub 内容",
+                "/hub 标签：查看可用标签",
+                "/hub 编辑 [编号] [新标题] | [新描述]：编辑自己的 Hub",
+                "/hub 删除 [编号]：删除自己的 Hub",
             ]
         )
 

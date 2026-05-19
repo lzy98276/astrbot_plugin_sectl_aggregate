@@ -8,7 +8,9 @@ _plugin_dir = Path(__file__).parent
 if str(_plugin_dir) not in sys.path:
     sys.path.insert(0, str(_plugin_dir))
 
+import os
 import re
+import tempfile
 from typing import AsyncGenerator
 
 from astrbot.api import logger
@@ -163,7 +165,7 @@ class EchoCavePlugin(Star):
 
     @filter.command("hub")
     async def hub(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """Hub 内容中心主指令：投稿、查看（随机/编号/最新）、搜索、标签、我的、编辑、删除"""
+        """Hub 内容中心主指令：投稿、查看（随机/编号/最新）、搜索、标签、编辑、删除"""
         command_text = _normalize_command(event.message_str)
         action, rest = _split_hub_action(command_text)
         try:
@@ -178,10 +180,6 @@ class EchoCavePlugin(Star):
                 return
             if action == "查看":
                 async for _ in self._handle_hub_view(event, rest):
-                    yield _
-                return
-            if action == "我的":
-                async for _ in self._handle_my_hubs(event):
                     yield _
                 return
             if action == "搜索":
@@ -207,6 +205,45 @@ class EchoCavePlugin(Star):
         except Exception as error:
             logger.exception(f"Hub 指令处理异常：{error}")
             yield event.plain_result("Hub 服务暂时没有回应，请稍后再试。")
+
+    async def _download_image(self, url: str) -> str | None:
+        """下载图片到临时文件，返回文件路径。"""
+        import aiohttp
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status != 200:
+                        return None
+                    data = await resp.read()
+                    ext = ".jpg"
+                    ct = resp.content_type or ""
+                    if "png" in ct:
+                        ext = ".png"
+                    elif "gif" in ct:
+                        ext = ".gif"
+                    elif "webp" in ct:
+                        ext = ".webp"
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+                    tmp.write(data)
+                    tmp.close()
+                    return tmp.name
+        except Exception as error:
+            logger.warning(f"Hub 图片下载失败：{error}")
+            return None
+
+    async def _send_hub_with_image(self, event: AstrMessageEvent, hub_data: dict) -> AsyncGenerator:
+        """发送 Hub 内容，下载图片并附带文本。"""
+        text = self.renderer.render_hub_text(hub_data)
+        image_url = hub_data.get("image_url", "")
+        if image_url:
+            file_path = await self._download_image(image_url)
+            if file_path:
+                yield event.image_result(file_path)
+                try:
+                    os.unlink(file_path)
+                except Exception:
+                    pass
+        yield event.plain_result(text)
 
     async def _handle_hub_create(self, event: AstrMessageEvent, rest: str):
         """处理 Hub 投稿。"""
@@ -241,6 +278,7 @@ class EchoCavePlugin(Star):
         yield event.plain_result(f"Hub 投稿成功，编号：{hub_id}")
 
     async def _handle_hub_view(self, event: AstrMessageEvent, rest: str):
+        """处理 Hub 查看（随机/最新/编号），最多返回 1 条并附带图片。"""
         parts = rest.strip().split()
         if not parts:
             async for _ in self._hub_view_random(event):
@@ -252,12 +290,11 @@ class EchoCavePlugin(Star):
                 yield _
             return
         if mode in ("最新", "随机"):
-            count = _parse_limit(parts[1:])
             if mode == "最新":
-                async for _ in self._hub_view_latest(event, count):
+                async for _ in self._hub_view_latest(event):
                     yield _
             else:
-                async for _ in self._hub_view_random_batch(event, count):
+                async for _ in self._hub_view_random(event):
                     yield _
             return
         async for _ in self._hub_view_by_id(event, mode):
@@ -269,37 +306,17 @@ class EchoCavePlugin(Star):
         if not response:
             yield event.plain_result("暂无 Hub 内容。")
             return
-        yield await self._html_result(
-            event,
-            self.renderer.render_hub(response),
-            self.renderer.render_hub_text(response),
-        )
+        async for _ in self._send_hub_with_image(event, response):
+            yield _
 
-    async def _hub_view_random_batch(self, event: AstrMessageEvent, count: int):
-        count = min(count, MAX_BATCH_LIMIT)
-        yield event.plain_result("正在随机查询 Hub 内容，请稍候...")
-        hubs, total = await self.hub_api.get_hubs(mode="random", limit=count)
-        if not hubs:
-            yield event.plain_result("暂无 Hub 内容。")
-            return
-        if count > MERGE_FORWARD_THRESHOLD:
-            async for _ in self._build_hub_merge_forward(event, hubs):
-                yield _
-        else:
-            yield event.plain_result(self._format_hub_batch("随机", hubs, total))
-
-    async def _hub_view_latest(self, event: AstrMessageEvent, count: int):
-        count = min(count, MAX_BATCH_LIMIT)
+    async def _hub_view_latest(self, event: AstrMessageEvent):
         yield event.plain_result("正在查询最新 Hub 内容，请稍候...")
-        hubs, total = await self.hub_api.get_hubs(limit=count)
+        hubs, total = await self.hub_api.get_hubs(limit=1)
         if not hubs:
             yield event.plain_result("暂无 Hub 内容。")
             return
-        if count > MERGE_FORWARD_THRESHOLD:
-            async for _ in self._build_hub_merge_forward(event, hubs):
-                yield _
-        else:
-            yield event.plain_result(self._format_hub_batch("最新", hubs, total))
+        async for _ in self._send_hub_with_image(event, hubs[0]):
+            yield _
 
     async def _hub_view_by_id(self, event: AstrMessageEvent, hub_id: str):
         yield event.plain_result("正在查询 Hub 内容，请稍候...")
@@ -307,43 +324,8 @@ class EchoCavePlugin(Star):
         if not response:
             yield event.plain_result(f"未找到编号为 {hub_id} 的 Hub 内容。")
             return
-        yield await self._html_result(
-            event,
-            self.renderer.render_hub(response),
-            self.renderer.render_hub_text(response),
-        )
-
-    async def _build_hub_merge_forward(self, event: AstrMessageEvent, hubs: list[dict]):
-        bot_uin = _get_bot_id(event)
-        nodes = []
-        for hub in hubs:
-            text = self._format_hub_batch("", [hub], 0)
-            nodes.append(Node(
-                uin=bot_uin,
-                name=f"Hub #{hub['id']}",
-                content=[Plain(text.strip())],
-            ))
-        yield event.chain_result([Nodes(nodes=nodes)])
-
-    def _format_hub_batch(
-        self, mode: str, hubs: list[dict], total: int
-    ) -> str:
-        if not mode:
-            return "\r\n".join(
-                f"📣 Hub #{hub['id']}\r\n标题：{hub['title']}\r\n"
-                f"描述：{hub['description']}\r\n"
-                f"发布者：{hub['author']} | {hub['created_at']}"
-                for hub in hubs
-            )
-        lines = [f"📣 Hub 内容 {mode}（共 {total} 条）", "━━━━━━━━━━━━━━"]
-        for hub in hubs:
-            preview = hub["title"][:40]
-            if len(hub["title"]) > 40:
-                preview += "..."
-            lines.append(f"#{hub['id']} {preview}")
-            lines.append(f"   发布者：{hub['author']} | {hub['created_at']}")
-            lines.append("")
-        return "\r\n".join(lines)
+        async for _ in self._send_hub_with_image(event, response):
+            yield _
 
     async def _handle_hub_search(self, event: AstrMessageEvent, keyword: str):
         keyword = keyword.strip()
@@ -371,32 +353,6 @@ class EchoCavePlugin(Star):
         for tag in tags:
             lines.append(f"  {tag.get('name', '?')}（{tag.get('count', 0)}）")
         yield event.plain_result("\r\n".join(lines))
-
-    async def _handle_my_hubs(self, event: AstrMessageEvent):
-        user_id = _get_user_id(event)
-        if not await self._ensure_bound(event):
-            yield event.plain_result("请先完成 QQ 绑定：绑定 [临时Key]")
-            return
-        bound = self.auth_state.get_bound(user_id)
-        sectl_user_id = (bound or {}).get("sectl_user_id", "") if bound else ""
-        if not sectl_user_id:
-            yield event.plain_result("未找到绑定的思拓创联账号信息。")
-            return
-        yield event.plain_result("正在查询你的 Hub 投稿，请稍候...")
-        hubs = await self.hub_api.get_my_hubs(sectl_user_id)
-        if not hubs:
-            yield event.plain_result("你还没有投稿过 Hub 内容。")
-            return
-        if len(hubs) > MERGE_FORWARD_THRESHOLD:
-            async for _ in self._build_hub_merge_forward(event, hubs):
-                yield _
-        else:
-            lines = [f"📣 你的 Hub 投稿（共 {len(hubs)} 条）：", ""]
-            for hub in hubs:
-                lines.append(f"#{hub['id']} {hub['title'][:40]}")
-                lines.append(f"   状态：{hub['status']} | {hub['created_at']}")
-                lines.append("")
-            yield event.plain_result("\r\n".join(lines))
 
     async def _handle_hub_update(self, event: AstrMessageEvent, rest: str):
         hub_id, remaining = _split_first(rest)
@@ -436,6 +392,38 @@ class EchoCavePlugin(Star):
         yield event.plain_result("正在删除，请稍候...")
         await self.hub_api.delete_hub(hub_doc["document_id"])
         yield event.plain_result(f"Hub #{hub_id} 已删除。")
+
+    async def _build_hub_merge_forward(self, event: AstrMessageEvent, hubs: list[dict]):
+        """构建 Hub 合并转发（搜索等多条结果时使用）。"""
+        bot_uin = _get_bot_id(event)
+        nodes = []
+        for hub in hubs:
+            text = self._format_hub_batch("", [hub], 0)
+            nodes.append(Node(
+                uin=bot_uin,
+                name=f"Hub #{hub['id']}",
+                content=[Plain(text.strip())],
+            ))
+        yield event.chain_result([Nodes(nodes=nodes)])
+
+    def _format_hub_batch(self, mode: str, hubs: list[dict], total: int) -> str:
+        """格式化 Hub 批量文本（搜索等场景）。"""
+        if not mode:
+            return "\r\n".join(
+                f"📣 Hub #{hub['id']}\r\n标题：{hub['title']}\r\n"
+                f"描述：{hub['description']}\r\n"
+                f"发布者：{hub['author']} | {hub['created_at']}"
+                for hub in hubs
+            )
+        lines = [f"📣 Hub 内容 {mode}（共 {total} 条）", "━━━━━━━━━━━━━━"]
+        for hub in hubs:
+            preview = hub["title"][:40]
+            if len(hub["title"]) > 40:
+                preview += "..."
+            lines.append(f"#{hub['id']} {preview}")
+            lines.append(f"   发布者：{hub['author']} | {hub['created_at']}")
+            lines.append("")
+        return "\r\n".join(lines)
 
     async def _handle_create(self, event: AstrMessageEvent, content: str):
         """处理投稿逻辑，写操作会先检查绑定状态。"""
