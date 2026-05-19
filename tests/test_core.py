@@ -333,7 +333,7 @@ class PluginBindingFlowTest(unittest.IsolatedAsyncioTestCase):
     """验证插件绑定确认后的状态刷新行为。"""
 
     async def test_bind_confirm_refreshes_server_status_before_marking_bound(self):
-        """校验确认绑定后会以服务端状态为准刷新本地缓存。"""
+        """校验确认绑定前静默检测到已绑定会提前返回并刷新本地缓存。"""
         plugin = EchoCavePlugin.__new__(EchoCavePlugin)
         plugin.config = EchoCaveConfig.from_astrbot_config({})
         plugin.auth_state = AuthStateManager()
@@ -345,13 +345,13 @@ class PluginBindingFlowTest(unittest.IsolatedAsyncioTestCase):
         with patch("main._get_user_id", return_value="user-1"):
             result = await plugin._handle_bind_confirm(event, "KEY")
 
-        self.assertEqual(result, "QQ号 12345 成功绑定了思拓创联账号 user-1")
+        self.assertEqual(result, "你已经绑定过 QQ 账号 12345（思拓创联账号：user-1），无需重复绑定。")
         self.assertTrue(plugin.auth_state.is_bound("user-1"))
         self.assertIsNone(plugin.auth_state.get_pending("user-1"))
         self.assertEqual(
             plugin.binding_api.calls,
-            # confirm 传入 (qq_number, temp_key)
-            [("confirm", "user-1", "KEY"), ("status", "user-1")],
+            # 仅查询了状态，未调用 confirm（预检测到已绑定直接返回）
+            [("status", "user-1")],
         )
 
     async def test_bind_confirm_rejects_when_server_not_bound(self):

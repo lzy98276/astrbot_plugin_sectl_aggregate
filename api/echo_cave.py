@@ -106,13 +106,16 @@ class EchoCaveApiClient(BaseApiClient):
         return _first_echo_document(response)
 
     async def get_my_echoes(
-        self, qq_number: str, limit: int = 20
+        self, qq_number: str, limit: int | None = None
     ) -> list[dict[str, Any]]:
-        """查询指定 QQ 用户的所有回声洞（内部 API）。"""
+        """查询指定 QQ 用户的所有回声洞（内部 API）。不传 limit 时不限制数量。"""
+        query: dict[str, str] = {"qq_number": qq_number, "token": self.config.api_token}
+        if limit is not None:
+            query["limit"] = str(limit)
         response = await self.request(
             "GET",
             "/api/echo-cave/internal",
-            query={"qq_number": qq_number, "limit": str(limit), "token": self.config.api_token},
+            query=query,
             token="",
         )
         documents = response.get("documents", [])
