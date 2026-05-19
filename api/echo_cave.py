@@ -55,7 +55,7 @@ class EchoCaveApiClient(BaseApiClient):
             "POST",
             "/api/echo-cave/internal",
             json_data={"content": content, "author_id": user_id},
-            headers={"x-echo-cave-token": self.config.api_token},
+            query={"token": self.config.api_token},
             token="",
         )
 
@@ -112,9 +112,8 @@ class EchoCaveApiClient(BaseApiClient):
         response = await self.request(
             "GET",
             "/api/echo-cave/internal",
-            query={"qq_number": qq_number, "limit": str(limit)},
+            query={"qq_number": qq_number, "limit": str(limit), "token": self.config.api_token},
             token="",
-            headers={"x-echo-cave-token": self.config.api_token},
         )
         documents = response.get("documents", [])
         if not isinstance(documents, list):
@@ -137,8 +136,8 @@ class EchoCaveApiClient(BaseApiClient):
                 "content": content,
                 "qq_number": qq_number,
             },
+            query={"token": self.config.api_token},
             token="",
-            headers={"x-echo-cave-token": self.config.api_token},
         )
 
     async def delete_echo(
@@ -149,8 +148,8 @@ class EchoCaveApiClient(BaseApiClient):
             "DELETE",
             "/api/echo-cave/internal",
             json_data={"document_id": document_id, "qq_number": qq_number},
+            query={"token": self.config.api_token},
             token="",
-            headers={"x-echo-cave-token": self.config.api_token},
         )
 
 
