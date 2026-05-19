@@ -349,16 +349,15 @@ class EchoCavePlugin(Star):
         """确认绑定 Key，并刷新本地绑定状态。"""
         qq_number = _get_user_id(event)
         # temp_key 已关联 user_id，系统自动查找绑定关系
-        response = await self.binding_api.confirm(qq_number, key)
+        await self.binding_api.confirm(qq_number, key)
         status = await self.binding_api.get_status(
             qq_number, token=self.config.api_token or None
         )
         if _is_bound_status(status):
             qq = str(_extract_response_value(status, "qq_number", "qq") or qq_number)
             self.auth_state.set_bound(qq_number, {"qq": qq})
-        else:
-            raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
-        return str(_extract_response_value(response, "message", "msg") or "QQ 绑定成功。")
+            return f"QQ号 {qq} 成功绑定了思拓创联的账号"
+        raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
 
     async def _ensure_bound(self, event: AstrMessageEvent) -> bool:
         """优先使用缓存，缓存缺失时调用服务端确认绑定状态。

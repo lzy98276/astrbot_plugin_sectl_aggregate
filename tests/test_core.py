@@ -346,7 +346,7 @@ class PluginBindingFlowTest(unittest.IsolatedAsyncioTestCase):
         with patch("main._get_user_id", return_value="user-1"):
             result = await plugin._handle_bind_confirm(event, "KEY")
 
-        self.assertEqual(result, "绑定完成")
+        self.assertEqual(result, "QQ号 12345 成功绑定了思拓创联的账号")
         self.assertTrue(plugin.auth_state.is_bound("user-1"))
         self.assertIsNone(plugin.auth_state.get_pending("user-1"))
         self.assertEqual(
