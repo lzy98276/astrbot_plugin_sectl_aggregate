@@ -14,7 +14,7 @@ from typing import AsyncGenerator
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
-from astrbot.api.message_components import Node, Plain
+from astrbot.api.message_components import Node, Nodes, Plain
 
 from api.base import EchoCaveApiError
 from api.echo_cave import EchoCaveApiClient
@@ -216,7 +216,7 @@ class EchoCavePlugin(Star):
     async def _build_merge_forward(self, event: AstrMessageEvent, echoes: list[dict]):
         """将多条回声洞构建为一条合并转发消息。
         
-        所有回声洞放在同一个 chain_result 中，每个回声洞为一个 Node。
+        所有回声洞用一个 ``Nodes`` 包装，框架视为一个合并转发段。
         仅 OneBot v11 平台支持，其他平台会降级为普通文本。
         """
         bot_uin = _get_bot_id(event)
@@ -228,7 +228,7 @@ class EchoCavePlugin(Star):
                 name=f"回声洞 #{echo['id']}",
                 content=[Plain(text.strip())],
             ))
-        yield event.chain_result(nodes)
+        yield event.chain_result([Nodes(nodes=nodes)])
 
     async def _view_by_id(self, event: AstrMessageEvent, echo_id: str):
         yield event.plain_result("正在查询回声洞，请稍候...")
@@ -336,7 +336,8 @@ class EchoCavePlugin(Star):
     ) -> str:
         if not mode:
             return "\r\n".join(
-                f"#{echo['id']} {echo['content']}\r\n发布者：{echo['author']} | {echo['created_at']}"
+                f"📣 回声洞 #{echo['id']}\r\n{echo['content']}\r\n"
+                f"发布者：{echo['author']}\r\n时间：{echo['created_at']}"
                 for echo in echoes
             )
         lines = [f"📣 回声洞 {mode}（共 {total} 条）", "━━━━━━━━━━━━━━"]
