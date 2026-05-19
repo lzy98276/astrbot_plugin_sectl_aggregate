@@ -24,6 +24,7 @@ astrbot_star_module.Context = object
 astrbot_star_module.Star = object
 astrbot_star_module.register = lambda *_args, **_kwargs: lambda cls: cls
 astrbot_message_components.Node = object
+astrbot_message_components.Nodes = object
 astrbot_message_components.Plain = object
 sys.modules.setdefault("astrbot", astrbot_module)
 sys.modules.setdefault("astrbot.api", astrbot_api_module)
