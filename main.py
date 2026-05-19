@@ -11,6 +11,7 @@ if str(_plugin_dir) not in sys.path:
 import os
 import re
 import tempfile
+import time
 from typing import AsyncGenerator
 
 from astrbot.api import logger
@@ -30,6 +31,7 @@ MAX_BATCH_LIMIT = 30
 MERGE_FORWARD_THRESHOLD = 3
 VIEW_MODE_ALIASES = {"最新": "最新", "随机": "随机", "latest": "最新", "random": "随机"}
 PENDING_HUB_SUBMISSIONS: dict[str, dict] = {}
+HUB_SUBMIT_TIMEOUT = 60
 
 
 def _detect_image_ext(data: bytes) -> str:
@@ -83,6 +85,18 @@ async def _extract_image_base64(event: AstrMessageEvent) -> tuple[str | None, st
     except Exception as exc:
         logger.warning(f"提取消息图片失败：{exc}")
     return None, None
+
+
+def _get_pending_submission(user_id: str) -> dict | None:
+    """获取并验证用户的待提交 Hub 投稿，超时则清理并返回 None。"""
+    pending = PENDING_HUB_SUBMISSIONS.get(user_id)
+    if not pending:
+        return None
+    ts = pending.get("timestamp", 0)
+    if time.time() - ts > HUB_SUBMIT_TIMEOUT:
+        PENDING_HUB_SUBMISSIONS.pop(user_id, None)
+        return None
+    return pending
 
 
 @register(
@@ -238,10 +252,11 @@ class EchoCavePlugin(Star):
                 return
             if action == "投稿取消":
                 user_id = _get_user_id(event)
-                if PENDING_HUB_SUBMISSIONS.pop(user_id, None):
+                if _get_pending_submission(user_id):
+                    PENDING_HUB_SUBMISSIONS.pop(user_id, None)
                     yield event.plain_result("已取消投稿。")
                 else:
-                    yield event.plain_result("当前没有待取消的投稿。")
+                    yield event.plain_result("当前没有待取消的投稿或已超时。")
                 return
             if action == "查看":
                 async for _ in self._handle_hub_view(event, rest):
@@ -355,9 +370,11 @@ class EchoCavePlugin(Star):
                 "title": title,
                 "description": description,
                 "sectl_user_id": sectl_user_id,
+                "timestamp": time.time(),
             }
             yield event.plain_result(
-                "已保存标题和说明。请发送图片来完成投稿：hub 投稿图片"
+                f"已保存标题和说明（{HUB_SUBMIT_TIMEOUT}秒内有效）。"
+                "请发送图片来完成投稿：hub 投稿图片"
             )
 
     async def _handle_hub_create_with_image(
@@ -365,10 +382,13 @@ class EchoCavePlugin(Star):
     ) -> AsyncGenerator:
         """处理二段式投稿的第二步：接收图片并完成投稿。"""
         user_id = _get_user_id(event)
-        pending = PENDING_HUB_SUBMISSIONS.pop(user_id, None)
+        pending = _get_pending_submission(user_id)
         if not pending:
-            yield event.plain_result("没有待投稿的内容，请先发送：hub 投稿 [标题] | [描述]")
+            yield event.plain_result(
+                "没有待投稿的内容或已超时（60秒），请重新发送：hub 投稿 [标题] | [描述]"
+            )
             return
+        PENDING_HUB_SUBMISSIONS.pop(user_id, None)
         image_data, image_filename = await _extract_image_base64(event)
         if not image_data:
             PENDING_HUB_SUBMISSIONS[user_id] = pending
