@@ -223,7 +223,7 @@ class EchoCavePlugin(Star):
 
     @filter.command("hub")
     async def hub(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """Hub 内容中心主指令：投稿（附带图片）、查看、搜索、标签、编辑、删除"""
+        """Hub 内容中心主指令：投稿（附带图片）、查看、标签、编辑、删除"""
         command_text = _normalize_command(event.message_str)
         action, rest = _split_hub_action(command_text)
         try:
@@ -249,10 +249,6 @@ class EchoCavePlugin(Star):
                 return
             if action == "查看":
                 async for _ in self._handle_hub_view(event, rest):
-                    yield _
-                return
-            if action == "搜索":
-                async for _ in self._handle_hub_search(event, rest):
                     yield _
                 return
             if action in ("标签", "tags"):
@@ -445,22 +441,6 @@ class EchoCavePlugin(Star):
         async for _ in self._send_hub_with_image(event, response):
             yield _
 
-    async def _handle_hub_search(self, event: AstrMessageEvent, keyword: str):
-        keyword = keyword.strip()
-        if not keyword:
-            yield event.plain_result("请发送：hub 搜索 [关键词]")
-            return
-        yield event.plain_result("正在搜索 Hub 内容，请稍候...")
-        hubs, total = await self.hub_api.get_hubs(keyword=keyword, limit=20)
-        if not hubs:
-            yield event.plain_result(f"未找到与「{keyword}」相关的 Hub 内容。")
-            return
-        if len(hubs) > MERGE_FORWARD_THRESHOLD:
-            async for _ in self._build_hub_merge_forward(event, hubs):
-                yield _
-        else:
-            yield event.plain_result(self._format_hub_batch("搜索结果", hubs, total))
-
     async def _handle_hub_tags(self, event: AstrMessageEvent):
         yield event.plain_result("正在查询标签列表，请稍候...")
         tags = await self.hub_api.get_tags()
@@ -512,7 +492,7 @@ class EchoCavePlugin(Star):
         yield event.plain_result(f"Hub #{hub_id} 已删除。")
 
     async def _build_hub_merge_forward(self, event: AstrMessageEvent, hubs: list[dict]):
-        """构建 Hub 合并转发（搜索等多条结果时使用）。"""
+        """构建 Hub 合并转发（多条结果时使用）。"""
         bot_uin = _get_bot_id(event)
         nodes = []
         for hub in hubs:
@@ -525,7 +505,7 @@ class EchoCavePlugin(Star):
         yield event.chain_result([Nodes(nodes=nodes)])
 
     def _format_hub_batch(self, mode: str, hubs: list[dict], total: int) -> str:
-        """格式化 Hub 批量文本（搜索等场景）。"""
+        """格式化 Hub 批量文本。"""
         if not mode:
             return "\r\n".join(
                 f"📣 Hub #{hub['id']}\r\n标题：{hub['title']}\r\n"
