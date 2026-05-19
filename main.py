@@ -215,13 +215,16 @@ class EchoCavePlugin(Star):
     async def _build_merge_forward(self, event: AstrMessageEvent, echoes: list[dict]) -> str:
         """将多条回声洞构建为合并转发 Node 列表。
         
+        一个 `chain_result` 中包含所有回声洞 Node，
+        用户点开合并转发后每条回声洞显示为一条独立消息。
         仅 OneBot v11 平台支持，其他平台会降级为普通文本。
         """
+        bot_uin = _get_bot_id(event)
         nodes = []
         for echo in echoes:
             text = self._format_echo_batch("", [echo], 0)
             nodes.append(Node(
-                uin=1352082231,
+                uin=bot_uin,
                 name=f"回声洞 #{echo['id']}",
                 content=[Plain(text.strip())],
             ))
@@ -304,7 +307,7 @@ class EchoCavePlugin(Star):
             yield event.plain_result(f"未找到编号为 {echo_id} 的回声洞。")
             return
         yield event.plain_result("正在更新，请稍候...")
-        await self.echo_api.update_echo(echo_doc["document_id"], content, user_id=_get_user_id(event))
+        await self.echo_api.update_echo(echo_doc["document_id"], content, qq_number=_get_user_id(event))
         yield event.plain_result(f"回声洞 #{echo_id} 已更新。")
 
     async def _handle_delete(self, event: AstrMessageEvent, echo_id: str):
@@ -321,7 +324,7 @@ class EchoCavePlugin(Star):
             yield event.plain_result(f"未找到编号为 {echo_id} 的回声洞。")
             return
         yield event.plain_result("正在删除，请稍候...")
-        await self.echo_api.delete_echo(echo_doc["document_id"], user_id=_get_user_id(event))
+        await self.echo_api.delete_echo(echo_doc["document_id"], qq_number=_get_user_id(event))
         yield event.plain_result(f"回声洞 #{echo_id} 已删除。")
 
     def _format_echo_batch(
@@ -344,21 +347,15 @@ class EchoCavePlugin(Star):
 
     async def _handle_bind_confirm(self, event: AstrMessageEvent, key: str) -> str:
         """确认绑定 Key，并刷新本地绑定状态。"""
-        user_id = _get_user_id(event)
-        # 在 QQ 平台上下文中，sender_id 即为 QQ 号
-        response = await self.binding_api.confirm(user_id, user_id, key)
+        qq_number = _get_user_id(event)
+        # temp_key 已关联 user_id，系统自动查找绑定关系
+        response = await self.binding_api.confirm(qq_number, key)
         status = await self.binding_api.get_status(
-            user_id, token=self.config.api_token or None
+            qq_number, token=self.config.api_token or None
         )
         if _is_bound_status(status):
-            qq = str(_extract_response_value(status, "qq_number", "qq") or user_id)
-            self.auth_state.set_bound(user_id, {"qq": qq})
-        else:
-            raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
-        return str(_extract_response_value(response, "message", "msg") or "QQ 绑定成功。")
-        if _is_bound_status(status):
-            qq = str(_extract_response_value(status, "qq_number", "qq") or user_id)
-            self.auth_state.set_bound(user_id, {"qq": qq})
+            qq = str(_extract_response_value(status, "qq_number", "qq") or qq_number)
+            self.auth_state.set_bound(qq_number, {"qq": qq})
         else:
             raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
         return str(_extract_response_value(response, "message", "msg") or "QQ 绑定成功。")
@@ -435,6 +432,24 @@ def _parse_limit(tokens: list[str]) -> int:
         if token.isdigit():
             return min(max(int(token), 1), MAX_BATCH_LIMIT)
     return 1
+
+
+def _get_bot_id(event: AstrMessageEvent) -> str:
+    """从事件中提取 bot 自身标识（QQ 号），用于合并转发发送者展示。"""
+    self_id = getattr(event, "get_self_id", None)
+    if callable(self_id):
+        value = self_id()
+        if value:
+            return str(value)
+    self_id = getattr(event, "self_id", None)
+    if self_id:
+        return str(self_id)
+    message_obj = getattr(event, "message_obj", None)
+    if message_obj:
+        self_id = getattr(message_obj, "self_id", None)
+        if self_id:
+            return str(self_id)
+    return "3057485835"
 
 
 def _get_user_id(event: AstrMessageEvent) -> str:

@@ -108,9 +108,13 @@ class EchoCaveApiClient(BaseApiClient):
     async def get_my_echoes(
         self, qq_number: str, limit: int = 20
     ) -> list[dict[str, Any]]:
-        """查询指定 QQ 绑定用户的所有回声洞。"""
+        """查询指定 QQ 用户的所有回声洞（内部 API）。"""
         response = await self.request(
-            "GET", "/api/echo-cave", query={"author": qq_number, "limit": str(limit)}
+            "GET",
+            "/api/echo-cave/internal",
+            query={"qq_number": qq_number, "limit": str(limit)},
+            token="",
+            headers={"x-echo-cave-token": self.config.internal_token},
         )
         documents = response.get("documents", [])
         if not isinstance(documents, list):
@@ -122,30 +126,31 @@ class EchoCaveApiClient(BaseApiClient):
         document_id: str,
         content: str,
         *,
-        user_id: str,
-        token: str | None = None,
+        qq_number: str,
     ) -> dict[str, Any]:
-        """更新用户自己的回声洞内容。"""
+        """更新回声洞（内部 API）。"""
         return await self.request(
             "PUT",
-            "/api/echo-cave",
+            "/api/echo-cave/internal",
             json_data={
                 "document_id": document_id,
                 "content": content,
-                "author_id": user_id,
+                "qq_number": qq_number,
             },
-            token=token,
+            token="",
+            headers={"x-echo-cave-token": self.config.internal_token},
         )
 
     async def delete_echo(
-        self, document_id: str, *, user_id: str, token: str | None = None
+        self, document_id: str, *, qq_number: str
     ) -> dict[str, Any]:
-        """删除用户自己的回声洞内容。"""
+        """删除回声洞（内部 API）。"""
         return await self.request(
             "DELETE",
-            "/api/echo-cave",
-            json_data={"document_id": document_id, "author_id": user_id},
-            token=token,
+            "/api/echo-cave/internal",
+            json_data={"document_id": document_id, "qq_number": qq_number},
+            token="",
+            headers={"x-echo-cave-token": self.config.internal_token},
         )
 
 

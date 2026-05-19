@@ -107,8 +107,8 @@ class FakeBindingApi:
         self.status_response = status_response
         self.calls = []
 
-    async def confirm(self, user_id, qq, key):
-        self.calls.append(("confirm", user_id, qq, key))
+    async def confirm(self, qq_number, temp_key):
+        self.calls.append(("confirm", qq_number, temp_key))
         return {"message": "绑定完成"}
 
     async def get_status(self, user_id, *, token=None):
@@ -293,8 +293,8 @@ class ApiClientTest(unittest.IsolatedAsyncioTestCase):
         await client.create_echo("内容", user_id="user-1")
         await client.get_echo()
         await client.get_echo("12")
-        await client.update_echo("12", "新内容", user_id="user-1")
-        await client.delete_echo("12", user_id="user-1")
+        await client.update_echo("12", "新内容", qq_number="user-1")
+        await client.delete_echo("12", qq_number="user-1")
 
         self.assertEqual(client.calls[0]["path"], "/api/echo-cave/internal")
         self.assertEqual(
@@ -304,10 +304,12 @@ class ApiClientTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.calls[1]["query"], {"mode": "random", "limit": 1})
         self.assertEqual(client.calls[2]["query"], {"id": "12"})
         self.assertEqual(client.calls[3]["method"], "PUT")
+        self.assertEqual(client.calls[3]["path"], "/api/echo-cave/internal")
         self.assertEqual(client.calls[3]["json_data"]["document_id"], "12")
-        self.assertEqual(client.calls[3]["json_data"]["author_id"], "user-1")
+        self.assertEqual(client.calls[3]["json_data"]["qq_number"], "user-1")
         self.assertEqual(client.calls[4]["method"], "DELETE")
-        self.assertEqual(client.calls[4]["json_data"]["author_id"], "user-1")
+        self.assertEqual(client.calls[4]["path"], "/api/echo-cave/internal")
+        self.assertEqual(client.calls[4]["json_data"]["qq_number"], "user-1")
 
     async def test_qq_binding_client_maps_binding_endpoints(self):
         """校验绑定状态、申请 Key 和确认绑定接口参数。"""
@@ -315,7 +317,7 @@ class ApiClientTest(unittest.IsolatedAsyncioTestCase):
 
         await client.get_status("user-1")
         await client.request_key("user-1", "12345")
-        await client.confirm("user-1", "12345", "KEY")
+        await client.confirm("12345", "KEY")
 
         self.assertEqual(client.calls[0]["query"], {"qq_number": "user-1"})
         self.assertEqual(client.calls[1]["path"], "/api/qq-binding/request")
@@ -324,7 +326,7 @@ class ApiClientTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             client.calls[2]["json_data"],
-            {"user_id": "user-1", "qq_number": "12345", "temp_key": "KEY"},
+            {"qq_number": "12345", "temp_key": "KEY"},
         )
 
 
@@ -349,8 +351,8 @@ class PluginBindingFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(plugin.auth_state.get_pending("user-1"))
         self.assertEqual(
             plugin.binding_api.calls,
-            # confirm 调用传入的参数：user_id, user_id(作为qq), key
-            [("confirm", "user-1", "user-1", "KEY"), ("status", "user-1")],
+            # confirm 传入 (qq_number, temp_key)
+            [("confirm", "user-1", "KEY"), ("status", "user-1")],
         )
 
     async def test_bind_confirm_rejects_when_server_not_bound(self):
