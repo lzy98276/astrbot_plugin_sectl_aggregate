@@ -127,10 +127,12 @@ class EchoCavePlugin(Star):
             logger.warning(f"根菜单纯文本渲染失败，使用硬编码降级：{error}")
             fallback = (
                 "📣 黎悠看板娘指令菜单\r\n"
-                "help：查看帮助菜单\r\n"
-                "回声洞 帮助：查看回声洞帮助菜单\r\n"
-                "绑定 [临时Key]：使用 Key 完成 QQ 绑定\r\n"
-                "绑定状态：查看绑定状态"
+                "/help：查看帮助菜单\r\n"
+                "/回声洞 帮助：查看回声洞帮助菜单\r\n"
+                "/hub 帮助：查看 Hub 内容中心帮助菜单\r\n"
+                "/绑定 [临时Key]：使用 Key 完成 QQ 绑定\r\n"
+                "/解绑：解绑当前 QQ 账号\r\n"
+                "/绑定状态：查看绑定状态"
             )
         try:
             html = self.renderer.render_root_menu()
