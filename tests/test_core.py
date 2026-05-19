@@ -55,7 +55,7 @@ class RecordingEchoCaveClient(EchoCaveApiClient):
 
     def __init__(self):
         config = EchoCaveConfig.from_astrbot_config({})
-        config.internal_token = "test-internal-token"
+        config.api_token = "test-api-token"
         super().__init__(config)
         self.calls = []
 
@@ -190,7 +190,6 @@ class CoreLogicTest(unittest.TestCase):
         astrbot_config = {
             "api_base_url": "https://example.com/",
             "api_token": "token-value",
-            "internal_token": "internal-value",
             "request_timeout": "invalid",
             "retry_count": 3,
         }
@@ -198,7 +197,6 @@ class CoreLogicTest(unittest.TestCase):
 
         self.assertEqual(config.api_base_url, "https://example.com")
         self.assertEqual(config.api_token, "token-value")
-        self.assertEqual(config.internal_token, "internal-value")
         self.assertEqual(config.request_timeout, 10.0)
         self.assertEqual(config.retry_count, 3)
 
