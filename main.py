@@ -394,8 +394,9 @@ class EchoCavePlugin(Star):
         user_id = _get_user_id(event)
         if _is_bound_status(status):
             qq = str(_extract_response_value(status, "qq_number", "qq") or "已绑定")
+            sectl_user = status.get("user_id", "") or "未知"
             self.auth_state.set_bound(user_id, {"qq": qq})
-            return f"当前账号已绑定 QQ：{qq}"
+            return f"QQ号 {qq} 绑定了思拓创联账号 {sectl_user}"
         self.auth_state.clear_bound(user_id)
         return "当前QQ尚未绑定思拓创联账号"
 
