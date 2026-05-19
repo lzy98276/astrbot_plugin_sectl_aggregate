@@ -118,8 +118,8 @@ class BaseApiClient:
                         )
                     if response.status == 401:
                         error_msg += (
-                            "。请检查插件配置中的 api_token 是否已填写有效的 "
-                            "Appwrite JWT 或 API Key（管理后台生成）"
+                            "。请检查插件配置中的 api_token "
+                            "是否已在服务端和环境变量中正确配置"
                         )
                     raise EchoCaveApiError(error_msg)
                 response_body = await response.text()
