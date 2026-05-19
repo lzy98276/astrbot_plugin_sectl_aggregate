@@ -362,14 +362,22 @@ class EchoCavePlugin(Star):
     async def _handle_bind_confirm(self, event: AstrMessageEvent, key: str) -> str:
         """确认绑定 Key，并刷新本地绑定状态。绑定前先静默检测是否已绑定。"""
         qq_number = _get_user_id(event)
-        status = await self.binding_api.get_status(
-            qq_number, token=self.config.api_token or None
-        )
-        if _is_bound_status(status):
-            qq = str(_extract_response_value(status, "qq_number", "qq") or qq_number)
-            sectl_user = str(status.get("user_id", "")) or ""
-            self.auth_state.set_bound(qq_number, {"qq": qq, "sectl_user_id": sectl_user})
-            return f"你已经绑定过 QQ 账号 {qq}（思拓创联账号：{sectl_user}），无需重复绑定。"
+        bound = self.auth_state.get_bound(qq_number)
+        if bound:
+            qq = bound.get("qq", qq_number)
+            sectl_user_id = bound.get("sectl_user_id", "")
+            return f"你已经绑定过 QQ 账号 {qq}（思拓创联账号：{sectl_user_id}），无需重复绑定。"
+        try:
+            status = await self.binding_api.get_status(
+                qq_number, token=self.config.api_token or None
+            )
+            if _is_bound_status(status):
+                qq = str(_extract_response_value(status, "qq_number", "qq") or qq_number)
+                sectl_user = str(status.get("user_id", "")) or ""
+                self.auth_state.set_bound(qq_number, {"qq": qq, "sectl_user_id": sectl_user})
+                return f"你已经绑定过 QQ 账号 {qq}（思拓创联账号：{sectl_user}），无需重复绑定。"
+        except EchoCaveApiError as error:
+            logger.warning(f"绑定前检测状态失败，继续执行确认流程：{error}")
         await self.binding_api.confirm(qq_number, key)
         status = await self.binding_api.get_status(
             qq_number, token=self.config.api_token or None
