@@ -10,10 +10,11 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class EchoCaveConfig:
-    """集中管理回声洞服务的运行配置。"""
+    """集中管理回声洞/Hub 服务的运行配置。"""
 
     api_base_url: str = "https://appwrite.sectl.cn"
     api_token: str = ""
+    hub_token: str = ""
     request_timeout: float = 10.0
     retry_count: int = 2
 
@@ -27,9 +28,15 @@ class EchoCaveConfig:
         return cls(
             api_base_url=str(api_base).rstrip("/") if api_base else "https://appwrite.sectl.cn",
             api_token=str(astrbot_config.get("api_token", "")),
+            hub_token=str(astrbot_config.get("hub_token", "")),
             request_timeout=_safe_float(timeout, 10.0),
             retry_count=max(_safe_int(retry, 2), 0),
         )
+
+    @property
+    def effective_hub_token(self) -> str:
+        """返回 hub_token，若未配置则回退到 api_token。"""
+        return self.hub_token or self.api_token
 
 
 def _safe_float(value, default: float) -> float:

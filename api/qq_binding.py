@@ -41,3 +41,14 @@ class QqBindingApiClient(BaseApiClient):
             json_data={"qq_number": qq_number, "temp_key": temp_key},
             token="",
         )
+
+    async def unbind(self, qq_number: str) -> dict[str, Any]:
+        """解绑当前用户的 QQ。
+
+        需要 api_token 作为 Bearer Token 认证。
+        """
+        return await self.request(
+            "DELETE",
+            "/api/user/qq-binding",
+            token=self.config.api_token or None,
+        )

@@ -128,29 +128,36 @@ class EchoCaveApiClient(BaseApiClient):
         document_id: str,
         content: str,
         *,
-        qq_number: str,
+        author_id: str | None = None,
+        qq_number: str | None = None,
     ) -> dict[str, Any]:
-        """更新回声洞（内部 API）。"""
+        """更新回声洞（内部 API）。支持 author_id 或 qq_number 核验所有权。"""
+        body: dict[str, Any] = {"document_id": document_id, "content": content}
+        if author_id:
+            body["author_id"] = author_id
+        elif qq_number:
+            body["qq_number"] = qq_number
         return await self.request(
             "PUT",
             "/api/echo-cave/internal",
-            json_data={
-                "document_id": document_id,
-                "content": content,
-                "qq_number": qq_number,
-            },
+            json_data=body,
             query={"token": self.config.api_token},
             token="",
         )
 
     async def delete_echo(
-        self, document_id: str, *, qq_number: str
+        self, document_id: str, *, author_id: str | None = None, qq_number: str | None = None
     ) -> dict[str, Any]:
-        """删除回声洞（内部 API）。"""
+        """删除回声洞（内部 API）。支持 author_id 或 qq_number 核验所有权。"""
+        body: dict[str, Any] = {"document_id": document_id}
+        if author_id:
+            body["author_id"] = author_id
+        elif qq_number:
+            body["qq_number"] = qq_number
         return await self.request(
             "DELETE",
             "/api/echo-cave/internal",
-            json_data={"document_id": document_id, "qq_number": qq_number},
+            json_data=body,
             query={"token": self.config.api_token},
             token="",
         )

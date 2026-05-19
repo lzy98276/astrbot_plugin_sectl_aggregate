@@ -18,6 +18,7 @@ from astrbot.api.message_components import Node, Nodes, Plain
 
 from api.base import EchoCaveApiError
 from api.echo_cave import EchoCaveApiClient
+from api.hub import HubApiClient
 from api.qq_binding import QqBindingApiClient
 from config import EchoCaveConfig
 from renderer import HtmlTemplateRenderer
@@ -38,6 +39,7 @@ class EchoCavePlugin(Star):
         super().__init__(context, config)
         self.config = EchoCaveConfig.from_astrbot_config(config or {})
         self.echo_api = EchoCaveApiClient(self.config)
+        self.hub_api = HubApiClient(self.config)
         self.binding_api = QqBindingApiClient(self.config)
         self.auth_state = AuthStateManager()
         self.renderer = HtmlTemplateRenderer(Path(__file__).parent / "templates")
@@ -125,6 +127,24 @@ class EchoCavePlugin(Star):
             logger.exception(f"QQ 绑定处理异常：{error}")
             yield event.plain_result("绑定服务暂时不可用，请稍后再试。")
 
+    @filter.command("解绑")
+    async def unbind_qq(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """解绑当前 QQ 账号"""
+        try:
+            user_id = _get_user_id(event)
+            if not await self._ensure_bound(event):
+                yield event.plain_result("你当前没有绑定 QQ 账号。")
+                return
+            await self.binding_api.unbind(user_id)
+            self.auth_state.clear_bound(user_id)
+            yield event.plain_result("QQ 账号已解绑。")
+        except EchoCaveApiError as error:
+            logger.warning(f"QQ 解绑 API 调用失败：{error}")
+            yield event.plain_result(f"解绑失败：{error}")
+        except Exception as error:
+            logger.exception(f"QQ 解绑处理异常：{error}")
+            yield event.plain_result("解绑服务暂时不可用，请稍后再试。")
+
     @filter.command("绑定状态")
     async def binding_status(self, event: AstrMessageEvent) -> AsyncGenerator:
         """查看当前 QQ 绑定状态"""
@@ -140,6 +160,282 @@ class EchoCavePlugin(Star):
         except Exception as error:
             logger.exception(f"QQ 绑定状态处理异常：{error}")
             yield event.plain_result("查询服务暂时不可用，请稍后再试。")
+
+    @filter.command("hub")
+    async def hub(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """Hub 内容中心主指令：投稿、查看（随机/编号/最新）、搜索、标签、我的、编辑、删除"""
+        command_text = _normalize_command(event.message_str)
+        action, rest = _split_hub_action(command_text)
+        try:
+            if action in ("", "help", "帮助", "菜单"):
+                yield await self._html_result(
+                    event, self.renderer.render_hub_menu(), self.renderer.render_hub_menu_text()
+                )
+                return
+            if action == "投稿":
+                async for _ in self._handle_hub_create(event, rest):
+                    yield _
+                return
+            if action == "查看":
+                async for _ in self._handle_hub_view(event, rest):
+                    yield _
+                return
+            if action == "我的":
+                async for _ in self._handle_my_hubs(event):
+                    yield _
+                return
+            if action == "搜索":
+                async for _ in self._handle_hub_search(event, rest):
+                    yield _
+                return
+            if action in ("标签", "tags"):
+                async for _ in self._handle_hub_tags(event):
+                    yield _
+                return
+            if action == "编辑":
+                async for _ in self._handle_hub_update(event, rest):
+                    yield _
+                return
+            if action == "删除":
+                async for _ in self._handle_hub_delete(event, rest):
+                    yield _
+                return
+            yield event.plain_result("未知 hub 指令，请发送：hub 帮助")
+        except EchoCaveApiError as error:
+            logger.warning(f"Hub API 调用失败：{error}")
+            yield event.plain_result("操作失败，请稍后重试或联系管理员。")
+        except Exception as error:
+            logger.exception(f"Hub 指令处理异常：{error}")
+            yield event.plain_result("Hub 服务暂时没有回应，请稍后再试。")
+
+    async def _handle_hub_create(self, event: AstrMessageEvent, rest: str):
+        """处理 Hub 投稿。"""
+        if not rest:
+            yield event.plain_result("请发送：hub 投稿 [标题] | [描述]")
+            return
+        parts = rest.split("|", 1)
+        title = parts[0].strip()
+        description = parts[1].strip() if len(parts) > 1 else ""
+        if not title:
+            yield event.plain_result("请发送：hub 投稿 [标题] | [描述]")
+            return
+        user_id = _get_user_id(event)
+        if not await self._ensure_bound(event):
+            yield event.plain_result("投稿前请先完成 QQ 绑定：绑定 [临时Key]")
+            return
+        bound = self.auth_state.get_bound(user_id)
+        sectl_user_id = (bound or {}).get("sectl_user_id", "") if bound else ""
+        if not sectl_user_id:
+            yield event.plain_result("未找到绑定的思拓创联账号信息，请重新绑定。")
+            return
+        yield event.plain_result("正在投稿，请稍候...")
+        response = await self.hub_api.create_hub(
+            title, description, author_id=sectl_user_id, author_name=user_id
+        )
+        hub_id = (
+            _extract_response_value(
+                response, "sequence_number", "document_id", "id"
+            )
+            or "新内容"
+        )
+        yield event.plain_result(f"Hub 投稿成功，编号：{hub_id}")
+
+    async def _handle_hub_view(self, event: AstrMessageEvent, rest: str):
+        parts = rest.strip().split()
+        if not parts:
+            async for _ in self._hub_view_random(event):
+                yield _
+            return
+        mode = VIEW_MODE_ALIASES.get(parts[0], parts[0])
+        if mode.isdigit():
+            async for _ in self._hub_view_by_id(event, mode):
+                yield _
+            return
+        if mode in ("最新", "随机"):
+            count = _parse_limit(parts[1:])
+            if mode == "最新":
+                async for _ in self._hub_view_latest(event, count):
+                    yield _
+            else:
+                async for _ in self._hub_view_random_batch(event, count):
+                    yield _
+            return
+        async for _ in self._hub_view_by_id(event, mode):
+            yield _
+
+    async def _hub_view_random(self, event: AstrMessageEvent):
+        yield event.plain_result("正在查询 Hub 内容，请稍候...")
+        response = await self.hub_api.get_hub()
+        if not response:
+            yield event.plain_result("暂无 Hub 内容。")
+            return
+        yield await self._html_result(
+            event,
+            self.renderer.render_hub(response),
+            self.renderer.render_hub_text(response),
+        )
+
+    async def _hub_view_random_batch(self, event: AstrMessageEvent, count: int):
+        count = min(count, MAX_BATCH_LIMIT)
+        yield event.plain_result("正在随机查询 Hub 内容，请稍候...")
+        hubs, total = await self.hub_api.get_hubs(mode="random", limit=count)
+        if not hubs:
+            yield event.plain_result("暂无 Hub 内容。")
+            return
+        if count > MERGE_FORWARD_THRESHOLD:
+            async for _ in self._build_hub_merge_forward(event, hubs):
+                yield _
+        else:
+            yield event.plain_result(self._format_hub_batch("随机", hubs, total))
+
+    async def _hub_view_latest(self, event: AstrMessageEvent, count: int):
+        count = min(count, MAX_BATCH_LIMIT)
+        yield event.plain_result("正在查询最新 Hub 内容，请稍候...")
+        hubs, total = await self.hub_api.get_hubs(limit=count)
+        if not hubs:
+            yield event.plain_result("暂无 Hub 内容。")
+            return
+        if count > MERGE_FORWARD_THRESHOLD:
+            async for _ in self._build_hub_merge_forward(event, hubs):
+                yield _
+        else:
+            yield event.plain_result(self._format_hub_batch("最新", hubs, total))
+
+    async def _hub_view_by_id(self, event: AstrMessageEvent, hub_id: str):
+        yield event.plain_result("正在查询 Hub 内容，请稍候...")
+        response = await self.hub_api.get_hub_by_sequence(hub_id)
+        if not response:
+            yield event.plain_result(f"未找到编号为 {hub_id} 的 Hub 内容。")
+            return
+        yield await self._html_result(
+            event,
+            self.renderer.render_hub(response),
+            self.renderer.render_hub_text(response),
+        )
+
+    async def _build_hub_merge_forward(self, event: AstrMessageEvent, hubs: list[dict]):
+        bot_uin = _get_bot_id(event)
+        nodes = []
+        for hub in hubs:
+            text = self._format_hub_batch("", [hub], 0)
+            nodes.append(Node(
+                uin=bot_uin,
+                name=f"Hub #{hub['id']}",
+                content=[Plain(text.strip())],
+            ))
+        yield event.chain_result([Nodes(nodes=nodes)])
+
+    def _format_hub_batch(
+        self, mode: str, hubs: list[dict], total: int
+    ) -> str:
+        if not mode:
+            return "\r\n".join(
+                f"📣 Hub #{hub['id']}\r\n标题：{hub['title']}\r\n"
+                f"描述：{hub['description']}\r\n"
+                f"发布者：{hub['author']} | {hub['created_at']}"
+                for hub in hubs
+            )
+        lines = [f"📣 Hub 内容 {mode}（共 {total} 条）", "━━━━━━━━━━━━━━"]
+        for hub in hubs:
+            preview = hub["title"][:40]
+            if len(hub["title"]) > 40:
+                preview += "..."
+            lines.append(f"#{hub['id']} {preview}")
+            lines.append(f"   发布者：{hub['author']} | {hub['created_at']}")
+            lines.append("")
+        return "\r\n".join(lines)
+
+    async def _handle_hub_search(self, event: AstrMessageEvent, keyword: str):
+        keyword = keyword.strip()
+        if not keyword:
+            yield event.plain_result("请发送：hub 搜索 [关键词]")
+            return
+        yield event.plain_result("正在搜索 Hub 内容，请稍候...")
+        hubs, total = await self.hub_api.get_hubs(keyword=keyword, limit=20)
+        if not hubs:
+            yield event.plain_result(f"未找到与「{keyword}」相关的 Hub 内容。")
+            return
+        if len(hubs) > MERGE_FORWARD_THRESHOLD:
+            async for _ in self._build_hub_merge_forward(event, hubs):
+                yield _
+        else:
+            yield event.plain_result(self._format_hub_batch("搜索结果", hubs, total))
+
+    async def _handle_hub_tags(self, event: AstrMessageEvent):
+        yield event.plain_result("正在查询标签列表，请稍候...")
+        tags = await self.hub_api.get_tags()
+        if not tags:
+            yield event.plain_result("暂无可用标签。")
+            return
+        lines = ["📣 Hub 可用标签", ""]
+        for tag in tags:
+            lines.append(f"  {tag.get('name', '?')}（{tag.get('count', 0)}）")
+        yield event.plain_result("\r\n".join(lines))
+
+    async def _handle_my_hubs(self, event: AstrMessageEvent):
+        user_id = _get_user_id(event)
+        if not await self._ensure_bound(event):
+            yield event.plain_result("请先完成 QQ 绑定：绑定 [临时Key]")
+            return
+        bound = self.auth_state.get_bound(user_id)
+        sectl_user_id = (bound or {}).get("sectl_user_id", "") if bound else ""
+        if not sectl_user_id:
+            yield event.plain_result("未找到绑定的思拓创联账号信息。")
+            return
+        yield event.plain_result("正在查询你的 Hub 投稿，请稍候...")
+        hubs = await self.hub_api.get_my_hubs(sectl_user_id)
+        if not hubs:
+            yield event.plain_result("你还没有投稿过 Hub 内容。")
+            return
+        if len(hubs) > MERGE_FORWARD_THRESHOLD:
+            async for _ in self._build_hub_merge_forward(event, hubs):
+                yield _
+        else:
+            lines = [f"📣 你的 Hub 投稿（共 {len(hubs)} 条）：", ""]
+            for hub in hubs:
+                lines.append(f"#{hub['id']} {hub['title'][:40]}")
+                lines.append(f"   状态：{hub['status']} | {hub['created_at']}")
+                lines.append("")
+            yield event.plain_result("\r\n".join(lines))
+
+    async def _handle_hub_update(self, event: AstrMessageEvent, rest: str):
+        hub_id, remaining = _split_first(rest)
+        if not hub_id or not remaining:
+            yield event.plain_result("请发送：hub 编辑 [编号] [新标题] | [新描述]")
+            return
+        user_id = _get_user_id(event)
+        if not await self._ensure_bound(event):
+            yield event.plain_result("编辑前请先完成 QQ 绑定：绑定 [临时Key]")
+            return
+        parts = remaining.split("|", 1)
+        title = parts[0].strip()
+        description = parts[1].strip() if len(parts) > 1 else ""
+        yield event.plain_result("正在查询 Hub 内容，请稍候...")
+        hub_doc = await self.hub_api.get_hub_by_sequence(hub_id)
+        if not hub_doc or not hub_doc.get("document_id"):
+            yield event.plain_result(f"未找到编号为 {hub_id} 的 Hub 内容。")
+            return
+        yield event.plain_result("正在更新，请稍候...")
+        await self.hub_api.update_hub(hub_doc["document_id"], title, description)
+        yield event.plain_result(f"Hub #{hub_id} 已更新。")
+
+    async def _handle_hub_delete(self, event: AstrMessageEvent, hub_id: str):
+        hub_id = hub_id.strip()
+        if not hub_id:
+            yield event.plain_result("请发送：hub 删除 编号")
+            return
+        user_id = _get_user_id(event)
+        if not await self._ensure_bound(event):
+            yield event.plain_result("删除前请先完成 QQ 绑定：绑定 [临时Key]")
+            return
+        yield event.plain_result("正在查询 Hub 内容，请稍候...")
+        hub_doc = await self.hub_api.get_hub_by_sequence(hub_id)
+        if not hub_doc or not hub_doc.get("document_id"):
+            yield event.plain_result(f"未找到编号为 {hub_id} 的 Hub 内容。")
+            return
+        yield event.plain_result("正在删除，请稍候...")
+        await self.hub_api.delete_hub(hub_doc["document_id"])
+        yield event.plain_result(f"Hub #{hub_id} 已删除。")
 
     async def _handle_create(self, event: AstrMessageEvent, content: str):
         """处理投稿逻辑，写操作会先检查绑定状态。"""
@@ -311,16 +607,19 @@ class EchoCavePlugin(Star):
         if not echo_id or not content:
             yield event.plain_result("请发送：回声洞 编辑 编号 新内容")
             return
+        user_id = _get_user_id(event)
         if not await self._ensure_bound(event):
             yield event.plain_result("编辑前请先完成 QQ 绑定：绑定 [临时Key]")
             return
+        bound = self.auth_state.get_bound(user_id)
+        sectl_user_id = (bound or {}).get("sectl_user_id", "") if bound else ""
         yield event.plain_result("正在查询回声洞，请稍候...")
         echo_doc = await self.echo_api.get_echo_by_sequence(echo_id)
         if not echo_doc or not echo_doc.get("document_id"):
             yield event.plain_result(f"未找到编号为 {echo_id} 的回声洞。")
             return
         yield event.plain_result("正在更新，请稍候...")
-        await self.echo_api.update_echo(echo_doc["document_id"], content, qq_number=_get_user_id(event))
+        await self.echo_api.update_echo(echo_doc["document_id"], content, author_id=sectl_user_id or None, qq_number=user_id)
         yield event.plain_result(f"回声洞 #{echo_id} 已更新。")
 
     async def _handle_delete(self, event: AstrMessageEvent, echo_id: str):
@@ -328,16 +627,19 @@ class EchoCavePlugin(Star):
         if not echo_id:
             yield event.plain_result("请发送：回声洞 删除 编号")
             return
+        user_id = _get_user_id(event)
         if not await self._ensure_bound(event):
             yield event.plain_result("删除前请先完成 QQ 绑定：绑定 [临时Key]")
             return
+        bound = self.auth_state.get_bound(user_id)
+        sectl_user_id = (bound or {}).get("sectl_user_id", "") if bound else ""
         yield event.plain_result("正在查询回声洞，请稍候...")
         echo_doc = await self.echo_api.get_echo_by_sequence(echo_id)
         if not echo_doc or not echo_doc.get("document_id"):
             yield event.plain_result(f"未找到编号为 {echo_id} 的回声洞。")
             return
         yield event.plain_result("正在删除，请稍候...")
-        await self.echo_api.delete_echo(echo_doc["document_id"], qq_number=_get_user_id(event))
+        await self.echo_api.delete_echo(echo_doc["document_id"], author_id=sectl_user_id or None, qq_number=user_id)
         yield event.plain_result(f"回声洞 #{echo_id} 已删除。")
 
     def _format_echo_batch(
@@ -529,3 +831,9 @@ def _is_bound_status(status: dict) -> bool:
         "已绑定",
         "1",
     }
+
+
+def _split_hub_action(command_text: str) -> tuple[str, str]:
+    """拆分 hub 二级指令和剩余参数。"""
+    text = command_text.removeprefix("hub").strip()
+    return _split_first(text)

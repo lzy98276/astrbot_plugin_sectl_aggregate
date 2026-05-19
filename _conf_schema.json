@@ -11,6 +11,12 @@
     "hint": "Appwrite JWT 或管理后台生成的 API Key，用于 /api/echo-cave/internal 和绑定等所有端点",
     "default": ""
   },
+  "hub_token": {
+    "description": "Hub Token（可选：用于 Hub 内容中心内部接口，不填时回退到 api_token）",
+    "type": "text",
+    "hint": "x-hub-token 认证头对应的 Token",
+    "default": ""
+  },
   "request_timeout": {
     "description": "请求超时时间（秒）",
     "type": "float",

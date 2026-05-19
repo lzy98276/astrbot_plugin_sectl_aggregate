@@ -15,11 +15,13 @@ class HtmlTemplateRenderer:
         self.template_dir = template_dir
 
     def render_root_menu(self) -> str:
-        """渲染根目录帮助菜单 HTML（无回声洞前缀的指令）。"""
+        """渲染根目录帮助菜单 HTML（无回声洞/hub前缀的指令）。"""
         commands = [
             {"name": "help", "desc": "查看帮助菜单"},
             {"name": "回声洞 帮助", "desc": "查看回声洞专属帮助菜单"},
+            {"name": "hub 帮助", "desc": "查看 Hub 内容中心帮助菜单"},
             {"name": "绑定 [临时Key]", "desc": "使用 Key 完成 QQ 绑定"},
+            {"name": "解绑", "desc": "解绑当前 QQ 账号"},
             {"name": "绑定状态", "desc": "查看当前账号 QQ 绑定状态"},
         ]
         items = "".join(
@@ -65,16 +67,103 @@ class HtmlTemplateRenderer:
         )
 
     def render_root_menu_text(self) -> str:
-        """生成根目录纯文本菜单，包含无回声洞前缀的指令。"""
+        """生成根目录纯文本菜单"""
         return "\r\n".join(
             [
                 "📣 黎悠看板娘指令菜单",
                 "help：查看帮助菜单",
                 "回声洞 帮助：查看回声洞帮助菜单",
+                "hub 帮助：查看 Hub 内容中心帮助菜单",
                 "绑定 [临时Key]：使用 Key 完成 QQ 绑定",
+                "解绑：解绑当前 QQ 账号",
                 "绑定状态：查看绑定状态",
             ]
         )
+
+    def render_menu_text(self) -> str:
+        """生成回声洞纯文本菜单。"""
+        return "\r\n".join(
+            [
+                "📣 回声洞指令列表",
+                "回声洞 投稿 [内容]：投稿回声洞（需绑定 QQ）",
+                "回声洞 查看 随机 [数量]：随机查看多条",
+                "回声洞 查看 [编号]：按编号查看",
+                "回声洞 查看 最新 [数量]：查看最新",
+                "回声洞 我的：查看自己投稿的列表",
+                "回声洞 编辑 [编号] [新内容]：编辑自己的回声洞",
+                "回声洞 删除 [编号]：删除自己的回声洞",
+            ]
+        )
+
+    def render_hub_menu(self) -> str:
+        """渲染 Hub 内容中心帮助菜单 HTML。"""
+        commands = [
+            {
+                "name": "hub 投稿 [标题] | [描述]",
+                "desc": "投稿 Hub 内容，需要先完成 QQ 绑定",
+            },
+            {"name": "hub 查看 随机 [数量]", "desc": "随机查看多条 Hub 内容（最多30条）"},
+            {"name": "hub 查看 [编号]", "desc": "按编号查看单条 Hub 内容"},
+            {"name": "hub 查看 最新 [数量]", "desc": "查看最新 N 条（最多30条）"},
+            {"name": "hub 我的", "desc": "查看自己投稿的 Hub 列表"},
+            {"name": "hub 搜索 [关键词]", "desc": "搜索 Hub 内容"},
+            {"name": "hub 标签", "desc": "查看可用标签列表"},
+            {"name": "hub 编辑 [编号] [新标题] | [新描述]", "desc": "编辑自己的 Hub 内容"},
+            {"name": "hub 删除 [编号]", "desc": "删除自己的 Hub 内容"},
+        ]
+        items = "".join(
+            f"<li><strong>{html.escape(item['name'])}</strong><span>{html.escape(item['desc'])}</span></li>"
+            for item in commands
+        )
+        return self._render("menu.html", {"commands": items})
+
+    def render_hub_menu_text(self) -> str:
+        """生成 Hub 纯文本菜单。"""
+        return "\r\n".join(
+            [
+                "📣 Hub 内容中心指令列表",
+                "hub 投稿 [标题] | [描述]：投稿 Hub（需绑定 QQ）",
+                "hub 查看 随机 [数量]：随机查看多条",
+                "hub 查看 [编号]：按编号查看",
+                "hub 查看 最新 [数量]：查看最新",
+                "hub 我的：查看自己投稿的列表",
+                "hub 搜索 [关键词]：搜索 Hub 内容",
+                "hub 标签：查看可用标签",
+                "hub 编辑 [编号] [新标题] | [新描述]：编辑自己的 Hub",
+                "hub 删除 [编号]：删除自己的 Hub",
+            ]
+        )
+
+    def render_hub(self, hub_data: dict[str, Any]) -> str:
+        """渲染单条 Hub 内容展示 HTML。"""
+        tags_html = "".join(
+            f"<span class=\"tag-item\">{html.escape(t)}</span>"
+            for t in hub_data.get("tags", [])
+        )
+        return self._render(
+            "hub_display.html",
+            {
+                "hub_id": html.escape(hub_data.get("id", "")),
+                "title": html.escape(hub_data.get("title", "")),
+                "description": html.escape(hub_data.get("description", "")).replace("\n", "<br>"),
+                "author": html.escape(hub_data.get("author", "匿名")),
+                "created_at": html.escape(hub_data.get("created_at", "")),
+                "views": str(hub_data.get("views", 0)),
+                "tags_html": tags_html,
+            },
+        )
+
+    def render_hub_text(self, hub_data: dict[str, Any]) -> str:
+        """生成单条 Hub 纯文本展示。"""
+        lines = [f"📣 Hub #{hub_data.get('id', '')}"]
+        lines.append(f"标题：{hub_data.get('title', '')}")
+        lines.append(f"描述：{hub_data.get('description', '')}")
+        tags = hub_data.get("tags", [])
+        if tags:
+            lines.append(f"标签：{' '.join(tags)}")
+        lines.append(f"发布者：{hub_data.get('author', '匿名')} | {hub_data.get('created_at', '')}")
+        lines.append(f"👁 {hub_data.get('views', 0)}")
+        return "\r\n".join(lines)
 
     def render_menu_text(self) -> str:
         """生成回声洞纯文本菜单，作为图片能力不可用时的降级输出。"""
