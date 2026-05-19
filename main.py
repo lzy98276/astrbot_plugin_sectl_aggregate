@@ -355,8 +355,9 @@ class EchoCavePlugin(Star):
         )
         if _is_bound_status(status):
             qq = str(_extract_response_value(status, "qq_number", "qq") or qq_number)
+            sectl_user = str(status.get("user_id", "")) or "未知"
             self.auth_state.set_bound(qq_number, {"qq": qq})
-            return f"QQ号 {qq} 成功绑定了思拓创联的账号"
+            return f"QQ号 {qq} 成功绑定了思拓创联账号 {sectl_user}"
         raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
 
     async def _ensure_bound(self, event: AstrMessageEvent) -> bool:
