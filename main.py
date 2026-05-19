@@ -208,15 +208,15 @@ class EchoCavePlugin(Star):
             yield event.plain_result("未找到回声洞。")
             return
         if count > MERGE_FORWARD_THRESHOLD:
-            yield await self._build_merge_forward(event, echoes)
+            async for _ in self._build_merge_forward(event, echoes):
+                yield _
         else:
             yield event.plain_result(self._format_echo_batch("随机", echoes, total))
 
-    async def _build_merge_forward(self, event: AstrMessageEvent, echoes: list[dict]) -> str:
-        """将多条回声洞构建为合并转发 Node 列表。
+    async def _build_merge_forward(self, event: AstrMessageEvent, echoes: list[dict]):
+        """将多条回声洞构建为一条合并转发消息。
         
-        一个 `chain_result` 中包含所有回声洞 Node，
-        用户点开合并转发后每条回声洞显示为一条独立消息。
+        所有回声洞放在同一个 chain_result 中，每个回声洞为一个 Node。
         仅 OneBot v11 平台支持，其他平台会降级为普通文本。
         """
         bot_uin = _get_bot_id(event)
@@ -228,7 +228,7 @@ class EchoCavePlugin(Star):
                 name=f"回声洞 #{echo['id']}",
                 content=[Plain(text.strip())],
             ))
-        return event.chain_result(nodes)
+        yield event.chain_result(nodes)
 
     async def _view_by_id(self, event: AstrMessageEvent, echo_id: str):
         yield event.plain_result("正在查询回声洞，请稍候...")
@@ -249,7 +249,11 @@ class EchoCavePlugin(Star):
         if not echoes:
             yield event.plain_result("暂无回声洞。")
             return
-        yield event.plain_result(self._format_echo_batch("最新", echoes, total))
+        if count > MERGE_FORWARD_THRESHOLD:
+            async for _ in self._build_merge_forward(event, echoes):
+                yield _
+        else:
+            yield event.plain_result(self._format_echo_batch("最新", echoes, total))
 
     async def _handle_my_echoes(self, event: AstrMessageEvent):
         """查询当前用户投稿的回声洞列表。"""
