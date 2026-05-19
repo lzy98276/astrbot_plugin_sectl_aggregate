@@ -146,11 +146,17 @@ class EchoCavePlugin(Star):
         if not content:
             yield event.plain_result("请发送：回声洞 投稿 内容")
             return
+        user_id = _get_user_id(event)
         if not await self._ensure_bound(event):
             yield event.plain_result("投稿前请先完成 QQ 绑定：绑定 [临时Key]")
             return
+        bound = self.auth_state.get_bound(user_id)
+        sectl_user_id = (bound or {}).get("sectl_user_id", "") if bound else ""
+        if not sectl_user_id:
+            yield event.plain_result("未找到绑定的思拓创联账号信息，请重新绑定。")
+            return
         yield event.plain_result("正在投稿，请稍候...")
-        response = await self.echo_api.create_echo(content, user_id=_get_user_id(event))
+        response = await self.echo_api.create_echo(content, user_id=sectl_user_id)
         echo_id = (
             _extract_response_value(
                 response, "sequence_number", "document_id", "id", "echo_id"
@@ -361,8 +367,8 @@ class EchoCavePlugin(Star):
         )
         if _is_bound_status(status):
             qq = str(_extract_response_value(status, "qq_number", "qq") or qq_number)
-            sectl_user = str(status.get("user_id", "")) or "未知"
-            self.auth_state.set_bound(qq_number, {"qq": qq})
+            sectl_user = str(status.get("user_id", "")) or ""
+            self.auth_state.set_bound(qq_number, {"qq": qq, "sectl_user_id": sectl_user})
             return f"你已经绑定过 QQ 账号 {qq}（思拓创联账号：{sectl_user}），无需重复绑定。"
         await self.binding_api.confirm(qq_number, key)
         status = await self.binding_api.get_status(
@@ -370,8 +376,8 @@ class EchoCavePlugin(Star):
         )
         if _is_bound_status(status):
             qq = str(_extract_response_value(status, "qq_number", "qq") or qq_number)
-            sectl_user = str(status.get("user_id", "")) or "未知"
-            self.auth_state.set_bound(qq_number, {"qq": qq})
+            sectl_user = str(status.get("user_id", "")) or ""
+            self.auth_state.set_bound(qq_number, {"qq": qq, "sectl_user_id": sectl_user})
             return f"QQ号 {qq} 成功绑定了思拓创联账号 {sectl_user}"
         raise EchoCaveApiError("绑定确认已提交，但服务端仍未返回已绑定状态，请稍后重试。")
 
@@ -398,7 +404,8 @@ class EchoCavePlugin(Star):
                 {
                     "qq": str(
                         _extract_response_value(status, "qq_number", "qq") or "已绑定"
-                    )
+                    ),
+                    "sectl_user_id": str(status.get("user_id", "")),
                 },
             )
             return True
@@ -410,9 +417,9 @@ class EchoCavePlugin(Star):
         user_id = _get_user_id(event)
         if _is_bound_status(status):
             qq = str(_extract_response_value(status, "qq_number", "qq") or "已绑定")
-            sectl_user = status.get("user_id", "") or "未知"
-            self.auth_state.set_bound(user_id, {"qq": qq})
-            return f"QQ号 {qq} 绑定了思拓创联账号 {sectl_user}"
+            sectl_user = status.get("user_id", "") or ""
+            self.auth_state.set_bound(user_id, {"qq": qq, "sectl_user_id": sectl_user})
+            return f"QQ号 {qq} 绑定了思拓创联账号 {sectl_user or '未知'}"
         self.auth_state.clear_bound(user_id)
         return "当前QQ尚未绑定思拓创联账号"
 
