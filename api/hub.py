@@ -18,8 +18,20 @@ class HubApiClient(BaseApiClient):
         author_id: str,
         author_name: str = "",
         tags: list[str] | None = None,
+        image_data: str | None = None,
+        image_filename: str | None = None,
     ) -> dict[str, Any]:
-        """投稿 Hub 内容（内部 API）。"""
+        """投稿 Hub 内容（内部 API）。
+
+        Args:
+            title: 标题。
+            description: 描述。
+            author_id: 作者 ID。
+            author_name: 作者显示名。
+            tags: 标签列表。
+            image_data: Base64 图片数据，格式 'data:image/{ext};base64,...'。
+            image_filename: 文件名（不含扩展名），仅在 image_data 模式有效。
+        """
         if not self.config.api_token:
             raise EchoCaveApiError(
                 "投稿失败：插件配置中的 api_token 未设置，"
@@ -34,6 +46,10 @@ class HubApiClient(BaseApiClient):
             body["author_name"] = author_name
         if tags:
             body["tags"] = tags
+        if image_data:
+            body["image_data"] = image_data
+        if image_filename:
+            body["image_filename"] = image_filename
         body["status"] = "approved"
         return await self.request(
             "POST",

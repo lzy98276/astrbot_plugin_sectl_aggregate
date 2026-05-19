@@ -100,7 +100,11 @@ class HtmlTemplateRenderer:
         commands = [
             {
                 "name": "/hub 投稿 [标题] | [描述]",
-                "desc": "投稿 Hub 内容，需要先完成 QQ 绑定",
+                "desc": "投稿 Hub 内容（支持附带图片一起发送），需先绑定 QQ",
+            },
+            {
+                "name": "/hub 投稿图片",
+                "desc": "发送图片完成上一步的投稿（二段式）",
             },
             {"name": "/hub 查看 [编号]", "desc": "按编号查看单条 Hub 内容（附带图片）"},
             {"name": "/hub 查看 随机", "desc": "随机查看一条 Hub 内容（附带图片）"},
@@ -121,7 +125,8 @@ class HtmlTemplateRenderer:
         return "\r\n".join(
             [
                 "📣 Hub 内容中心指令列表",
-                "/hub 投稿 [标题] | [描述]：投稿 Hub（需绑定 QQ）",
+                "/hub 投稿 [标题] | [描述]：投稿 Hub（支持附带图片），需绑定 QQ",
+                "/hub 投稿图片：发送图片完成上一步的投稿",
                 "/hub 查看 [编号]：按编号查看（附带图片）",
                 "/hub 查看 随机：随机查看一条（附带图片）",
                 "/hub 查看 最新：查看最新一条（附带图片）",

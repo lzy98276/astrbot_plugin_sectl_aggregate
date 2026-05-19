@@ -16,7 +16,7 @@ from typing import AsyncGenerator
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
-from astrbot.api.message_components import Node, Nodes, Plain
+from astrbot.api.message_components import Image, Node, Nodes, Plain
 
 from api.base import EchoCaveApiError
 from api.echo_cave import EchoCaveApiClient
@@ -29,6 +29,60 @@ from state import AuthStateManager
 MAX_BATCH_LIMIT = 30
 MERGE_FORWARD_THRESHOLD = 3
 VIEW_MODE_ALIASES = {"最新": "最新", "随机": "随机", "latest": "最新", "random": "随机"}
+PENDING_HUB_SUBMISSIONS: dict[str, dict] = {}
+
+
+def _detect_image_ext(data: bytes) -> str:
+    """从图片字节数据检测文件扩展名。"""
+    if data[:8] == b"\x89PNG\r\n\x1a":
+        return "png"
+    if data[:2] == b"\xff\xd8":
+        return "jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return "jpeg"
+
+
+async def _extract_image_base64(event: AstrMessageEvent) -> tuple[str | None, str | None]:
+    """从消息中提取图片，返回 (base64_data, filename)。
+
+    base64_data 格式：'data:image/{ext};base64,{encoded}'。
+    如果消息中没有图片，返回 (None, None)。
+    """
+    import base64
+
+    message_obj = getattr(event, "message_obj", None)
+    if not message_obj:
+        return None, None
+    message = getattr(message_obj, "message", None)
+    if not message:
+        return None, None
+    try:
+        for comp in message:
+            if isinstance(comp, Image):
+                file_attr = getattr(comp, "file", None) or getattr(comp, "url", None)
+                if not file_attr:
+                    continue
+                if file_attr.startswith(("http://", "https://")):
+                    import aiohttp
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(
+                            file_attr, timeout=aiohttp.ClientTimeout(total=30)
+                        ) as resp:
+                            if resp.status != 200:
+                                continue
+                            data = await resp.read()
+                else:
+                    with open(file_attr, "rb") as f:
+                        data = f.read()
+                ext = _detect_image_ext(data)
+                encoded = base64.b64encode(data).decode("utf-8")
+                return f"data:image/{ext};base64,{encoded}", f"hub_upload.{ext}"
+    except Exception as exc:
+        logger.warning(f"提取消息图片失败：{exc}")
+    return None, None
 
 
 @register(
@@ -178,6 +232,17 @@ class EchoCavePlugin(Star):
                 async for _ in self._handle_hub_create(event, rest):
                     yield _
                 return
+            if action == "投稿图片":
+                async for _ in self._handle_hub_create_with_image(event):
+                    yield _
+                return
+            if action == "投稿取消":
+                user_id = _get_user_id(event)
+                if PENDING_HUB_SUBMISSIONS.pop(user_id, None):
+                    yield event.plain_result("已取消投稿。")
+                else:
+                    yield event.plain_result("当前没有待取消的投稿。")
+                return
             if action == "查看":
                 async for _ in self._handle_hub_view(event, rest):
                     yield _
@@ -246,7 +311,7 @@ class EchoCavePlugin(Star):
         yield event.plain_result(text)
 
     async def _handle_hub_create(self, event: AstrMessageEvent, rest: str):
-        """处理 Hub 投稿。"""
+        """处理 Hub 投稿，支持一段式（文字+图片同发）和二段式（先文字后图片）。"""
         if not rest:
             yield event.plain_result("请发送：hub 投稿 [标题] | [描述]")
             return
@@ -265,9 +330,57 @@ class EchoCavePlugin(Star):
         if not sectl_user_id:
             yield event.plain_result("未找到绑定的思拓创联账号信息，请重新绑定。")
             return
-        yield event.plain_result("正在投稿，请稍候...")
+        image_data, image_filename = await _extract_image_base64(event)
+        if image_data:
+            yield event.plain_result("正在投稿（含图片），请稍候...")
+            response = await self.hub_api.create_hub(
+                title,
+                description,
+                author_id=sectl_user_id,
+                author_name=user_id,
+                image_data=image_data,
+                image_filename=image_filename,
+            )
+            hub_id = (
+                _extract_response_value(
+                    response, "sequence_number", "document_id", "id"
+                )
+                or "新内容"
+            )
+            yield event.plain_result(
+                f"Hub 投稿成功，编号：{hub_id}（含图片）"
+            )
+        else:
+            PENDING_HUB_SUBMISSIONS[user_id] = {
+                "title": title,
+                "description": description,
+                "sectl_user_id": sectl_user_id,
+            }
+            yield event.plain_result(
+                "已保存标题和说明。请发送图片来完成投稿：hub 投稿图片"
+            )
+
+    async def _handle_hub_create_with_image(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator:
+        """处理二段式投稿的第二步：接收图片并完成投稿。"""
+        user_id = _get_user_id(event)
+        pending = PENDING_HUB_SUBMISSIONS.pop(user_id, None)
+        if not pending:
+            yield event.plain_result("没有待投稿的内容，请先发送：hub 投稿 [标题] | [描述]")
+            return
+        image_data, image_filename = await _extract_image_base64(event)
+        if not image_data:
+            PENDING_HUB_SUBMISSIONS[user_id] = pending
+            yield event.plain_result("请附带要投稿的图片，或发送：hub 投稿取消 来取消投稿")
+            return
+        yield event.plain_result("正在投稿（含图片），请稍候...")
         response = await self.hub_api.create_hub(
-            title, description, author_id=sectl_user_id, author_name=user_id
+            pending["title"],
+            pending["description"],
+            author_id=pending["sectl_user_id"],
+            image_data=image_data,
+            image_filename=image_filename,
         )
         hub_id = (
             _extract_response_value(
@@ -275,7 +388,7 @@ class EchoCavePlugin(Star):
             )
             or "新内容"
         )
-        yield event.plain_result(f"Hub 投稿成功，编号：{hub_id}")
+        yield event.plain_result(f"Hub 投稿成功，编号：{hub_id}（含图片）")
 
     async def _handle_hub_view(self, event: AstrMessageEvent, rest: str):
         """处理 Hub 查看（随机/最新/编号），最多返回 1 条并附带图片。"""
