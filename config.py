@@ -14,7 +14,6 @@ class EchoCaveConfig:
 
     api_base_url: str = "https://appwrite.sectl.cn"
     api_token: str = ""
-    internal_token: str = ""
     request_timeout: float = 10.0
     retry_count: int = 2
 
@@ -28,7 +27,6 @@ class EchoCaveConfig:
         return cls(
             api_base_url=str(api_base).rstrip("/") if api_base else "https://appwrite.sectl.cn",
             api_token=str(astrbot_config.get("api_token", "")),
-            internal_token=str(astrbot_config.get("internal_token", "")),
             request_timeout=_safe_float(timeout, 10.0),
             retry_count=max(_safe_int(retry, 2), 0),
         )

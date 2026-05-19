@@ -43,20 +43,20 @@ class EchoCaveApiClient(BaseApiClient):
     ) -> dict[str, Any]:
         """提交一条新的回声洞内容。
 
-        内部投稿接口依赖 x-echo-cave-token（配置项 internal_token），
+        内部投稿接口依赖 x-echo-cave-token（即 api_token），
         未配置时直接报错避免无效请求。
         """
-        if not self.config.internal_token:
+        if not self.config.api_token:
             raise EchoCaveApiError(
-                "投稿失败：插件配置中的 internal_token 未设置，"
-                "请联系管理员配置内部投稿 Token"
+                "投稿失败：插件配置中的 api_token 未设置，"
+                "请联系管理员配置 Token"
             )
         return await self.request(
             "POST",
             "/api/echo-cave/internal",
             json_data={"content": content, "author_id": user_id},
-            headers={"x-echo-cave-token": self.config.internal_token},
-            token=token,
+            headers={"x-echo-cave-token": self.config.api_token},
+            token="",
         )
 
     async def get_echo(self, echo_id: str | None = None) -> dict[str, Any]:
@@ -114,7 +114,7 @@ class EchoCaveApiClient(BaseApiClient):
             "/api/echo-cave/internal",
             query={"qq_number": qq_number, "limit": str(limit)},
             token="",
-            headers={"x-echo-cave-token": self.config.internal_token},
+            headers={"x-echo-cave-token": self.config.api_token},
         )
         documents = response.get("documents", [])
         if not isinstance(documents, list):
@@ -138,7 +138,7 @@ class EchoCaveApiClient(BaseApiClient):
                 "qq_number": qq_number,
             },
             token="",
-            headers={"x-echo-cave-token": self.config.internal_token},
+            headers={"x-echo-cave-token": self.config.api_token},
         )
 
     async def delete_echo(
@@ -150,7 +150,7 @@ class EchoCaveApiClient(BaseApiClient):
             "/api/echo-cave/internal",
             json_data={"document_id": document_id, "qq_number": qq_number},
             token="",
-            headers={"x-echo-cave-token": self.config.internal_token},
+            headers={"x-echo-cave-token": self.config.api_token},
         )
 
 
