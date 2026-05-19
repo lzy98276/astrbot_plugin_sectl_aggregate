@@ -148,7 +148,7 @@ class EchoCavePlugin(Star):
             yield event.plain_result("请发送：回声洞 投稿 内容")
             return
         if not await self._ensure_bound(event):
-            yield event.plain_result("投稿前请先完成 QQ 绑定：绑定 QQ号")
+            yield event.plain_result("投稿前请先完成 QQ 绑定：绑定 [临时Key]")
             return
         yield event.plain_result("正在投稿，请稍候...")
         response = await self.echo_api.create_echo(content, user_id=_get_user_id(event))
@@ -259,7 +259,7 @@ class EchoCavePlugin(Star):
         """查询当前用户投稿的回声洞列表。"""
         user_id = _get_user_id(event)
         if not await self._ensure_bound(event):
-            yield event.plain_result("请先完成 QQ 绑定：绑定 QQ号")
+            yield event.plain_result("请先完成 QQ 绑定：绑定 [临时Key]")
             return
         yield event.plain_result("正在查询你的回声洞，请稍候...")
         # _ensure_bound 已缓存绑定状态，直接从缓存取 QQ 号
@@ -303,7 +303,7 @@ class EchoCavePlugin(Star):
             yield event.plain_result("请发送：回声洞 编辑 编号 新内容")
             return
         if not await self._ensure_bound(event):
-            yield event.plain_result("编辑前请先完成 QQ 绑定：绑定 QQ号")
+            yield event.plain_result("编辑前请先完成 QQ 绑定：绑定 [临时Key]")
             return
         yield event.plain_result("正在查询回声洞，请稍候...")
         echo_doc = await self.echo_api.get_echo_by_sequence(echo_id)
@@ -320,7 +320,7 @@ class EchoCavePlugin(Star):
             yield event.plain_result("请发送：回声洞 删除 编号")
             return
         if not await self._ensure_bound(event):
-            yield event.plain_result("删除前请先完成 QQ 绑定：绑定 QQ号")
+            yield event.plain_result("删除前请先完成 QQ 绑定：绑定 [临时Key]")
             return
         yield event.plain_result("正在查询回声洞，请稍候...")
         echo_doc = await self.echo_api.get_echo_by_sequence(echo_id)
