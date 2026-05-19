@@ -127,8 +127,8 @@ def _normalize_echo_data(echo_data: dict[str, Any]) -> dict[str, str]:
     return {
         "id": str(
             data.get("sequence_number")
-            or data.get("document_id")
             or data.get("id")
+            or data.get("document_id")
             or data.get("echo_id")
             or "随机"
         ),
