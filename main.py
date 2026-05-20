@@ -297,17 +297,18 @@ class EchoCavePlugin(Star):
             return None
 
     async def _send_hub_with_image(self, event: AstrMessageEvent, hub_data: dict) -> AsyncGenerator:
-        """发送 Hub 内容，下载图片并附带文本。"""
+        """发送 Hub 内容，图片和文本同一条消息发送。"""
         text = self.renderer.render_hub_text(hub_data)
         image_url = hub_data.get("image_url", "")
         if image_url:
             file_path = await self._download_image(image_url)
             if file_path:
-                yield event.image_result(file_path)
+                yield event.chain_result([Image(file=file_path), Plain(text)])
                 try:
                     os.unlink(file_path)
                 except Exception:
                     pass
+                return
         yield event.plain_result(text)
 
     async def _handle_hub_create(self, event: AstrMessageEvent, rest: str):

@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 import html
+from datetime import datetime
 from pathlib import Path
 from string import Template
 from typing import Any
+
+
+def _format_time(iso_str: str) -> str:
+    """将 ISO 8601 时间格式化为标准可读格式。"""
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return iso_str
 
 
 class HtmlTemplateRenderer:
@@ -153,14 +163,18 @@ class HtmlTemplateRenderer:
 
     def render_hub_text(self, hub_data: dict[str, Any]) -> str:
         """生成单条 Hub 纯文本展示。"""
+        created_at = hub_data.get("created_at", "")
+        time_str = _format_time(created_at) if created_at else ""
         lines = [f"📣 Hub #{hub_data.get('id', '')}"]
         lines.append(f"标题：{hub_data.get('title', '')}")
         lines.append(f"描述：{hub_data.get('description', '')}")
         tags = hub_data.get("tags", [])
         if tags:
             lines.append(f"标签：{' '.join(tags)}")
-        lines.append(f"发布者：{hub_data.get('author', '匿名')} | {hub_data.get('created_at', '')}")
-        lines.append(f"👁 {hub_data.get('views', 0)}")
+        lines.append(f"发布者：{hub_data.get('author', '匿名')}")
+        if time_str:
+            lines.append(time_str)
+        lines.append(f"浏览量：{hub_data.get('views', 0)}")
         return "\r\n".join(lines)
 
     def render_menu_text(self) -> str:
