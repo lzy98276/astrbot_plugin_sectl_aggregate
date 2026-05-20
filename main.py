@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # 确保插件目录在 sys.path 中，使 api/、config 等模块可被导入
@@ -36,9 +36,10 @@ PENDING_HUB_SUBMISSIONS: dict[str, dict] = {}
 
 
 def _format_time(iso_str: str) -> str:
-    """将 ISO 8601 时间格式化为标准可读格式。"""
+    """将 ISO 8601 时间转为 UTC+8 可读格式。"""
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        dt = dt.replace(tzinfo=None) + timedelta(hours=8)
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
         return iso_str
