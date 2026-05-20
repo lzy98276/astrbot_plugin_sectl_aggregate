@@ -307,9 +307,14 @@ class EchoCavePlugin(Star):
     async def on_message(self, event: AstrMessageEvent) -> AsyncGenerator:
         """处理非指令消息：检测待提交用户的下一条消息。
         有图片则自动完成投稿，无图片（纯文字）则自动取消，60秒超时。"""
-        user_id = _get_user_id(event)
+        try:
+            user_id = _get_user_id(event)
+        except Exception:
+            logger.warning("on_message 无法提取用户ID，跳过")
+            return
         if not PENDING_HUB_SUBMISSIONS.get(user_id):
             return
+        logger.info(f"用户 {user_id} 有待提交的 Hub 内容，自动检测消息中的图片...")
         async for _ in self._try_complete_pending(event):
             yield _
 
@@ -419,17 +424,19 @@ class EchoCavePlugin(Star):
             )
 
     async def _try_complete_pending(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """处理待提交：有图片→完成，无图片→自动取消，超时60秒→取消。"""
+        """处理待提交：有图片→完成，有文字无图片→自动取消，60秒超时→取消。"""
         user_id = _get_user_id(event)
         pending = PENDING_HUB_SUBMISSIONS.pop(user_id, None)
         if not pending:
             return
         ts = pending.get("timestamp", 0)
         if time.time() - ts > 60:
+            logger.info(f"用户 {user_id} 待提交超时（60秒），已自动取消")
             yield event.plain_result("投稿已超时（60秒），已自动取消。请重新发送：hub 投稿 [标题] | [描述]")
             return
         image_data, image_filename = await _extract_image_base64(event)
         if image_data:
+            logger.info(f"用户 {user_id} 检测到图片，完成 Hub 投稿")
             yield event.plain_result("正在投稿（含图片），请稍候...")
             response = await self.hub_api.create_hub(
                 pending["title"],
@@ -447,7 +454,13 @@ class EchoCavePlugin(Star):
             )
             yield event.plain_result(f"Hub 投稿成功，编号：{hub_id}（含图片）")
         else:
-            yield event.plain_result("投稿已取消（未检测到图片）。")
+            text = (event.message_str or "").strip()
+            if text:
+                logger.info(f"用户 {user_id} 发送文字「{text}」无图片，自动取消投稿")
+                yield event.plain_result("投稿已取消（未检测到图片）。")
+            else:
+                logger.info(f"用户 {user_id} 发送非文字消息且无图片，保留待提交")
+                PENDING_HUB_SUBMISSIONS[user_id] = pending
             return
 
     async def _handle_hub_view(self, event: AstrMessageEvent, rest: str):
