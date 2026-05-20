@@ -90,8 +90,10 @@ async def _extract_image_base64(event: AstrMessageEvent) -> tuple[str | None, st
                     is_image = True
             if not is_image:
                 continue
-            file_attr = getattr(comp, "file", None) or getattr(comp, "url", None)
+            # 优先使用 URL（aiocqhttp 提供可下载链接），其次使用本地文件路径
+            file_attr = getattr(comp, "url", None) or getattr(comp, "file", None)
             if not file_attr:
+                logger.warning(f"图片组件缺少 url 或 file 属性")
                 continue
             if file_attr.startswith(("http://", "https://")):
                 import aiohttp
@@ -100,9 +102,14 @@ async def _extract_image_base64(event: AstrMessageEvent) -> tuple[str | None, st
                         file_attr, timeout=aiohttp.ClientTimeout(total=30)
                     ) as resp:
                         if resp.status != 200:
+                            logger.warning(f"下载图片失败 HTTP {resp.status}: {file_attr}")
                             continue
                         data = await resp.read()
             else:
+                # 本地文件，跳过无法访问的相对路径
+                if not os.path.isabs(file_attr):
+                    logger.warning(f"图片文件路径非绝对路径，跳过：{file_attr}")
+                    continue
                 with open(file_attr, "rb") as f:
                     data = f.read()
             ext = _detect_image_ext(data)
