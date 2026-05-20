@@ -24,7 +24,7 @@ from api.echo_cave import EchoCaveApiClient
 from api.hub import HubApiClient
 from api.qq_binding import QqBindingApiClient
 from config import EchoCaveConfig
-from renderer import HtmlTemplateRenderer
+from renderer import HtmlTemplateRenderer, _format_time
 from state import AuthStateManager
 
 MAX_BATCH_LIMIT = 30
@@ -297,19 +297,35 @@ class EchoCavePlugin(Star):
             return None
 
     async def _send_hub_with_image(self, event: AstrMessageEvent, hub_data: dict) -> AsyncGenerator:
-        """发送 Hub 内容，图片和文本同一条消息发送。"""
-        text = self.renderer.render_hub_text(hub_data)
+        """发送 Hub 内容，图片放在标题下方。"""
+        hub_id = hub_data.get("id", "")
+        title = hub_data.get("title", "")
+        description = hub_data.get("description", "")
+        tags = hub_data.get("tags", [])
+        author = hub_data.get("author", "匿名")
+        created_at = hub_data.get("created_at", "")
+        views = hub_data.get("views", 0)
+        before_img = f"📣 Hub #{hub_id}\r\n标题：{title}"
+        rest_lines = [f"描述：{description}"]
+        if tags:
+            rest_lines.append(f"标签：{' '.join(tags)}")
+        rest_lines.append(f"发布者：{author}")
+        time_str = _format_time(created_at) if created_at else ""
+        if time_str:
+            rest_lines.append(time_str)
+        rest_lines.append(f"浏览量：{views}")
+        after_img = "\r\n".join(rest_lines)
         image_url = hub_data.get("image_url", "")
         if image_url:
             file_path = await self._download_image(image_url)
             if file_path:
-                yield event.chain_result([Image(file=file_path), Plain(text)])
+                yield event.chain_result([Plain(before_img), Image(file=file_path), Plain(after_img)])
                 try:
                     os.unlink(file_path)
                 except Exception:
                     pass
                 return
-        yield event.plain_result(text)
+        yield event.plain_result(f"{before_img}\r\n{after_img}")
 
     async def _handle_hub_create(self, event: AstrMessageEvent, rest: str):
         """处理 Hub 投稿。带图则一段式提交，无图则保存待提交等待后续图片。"""
