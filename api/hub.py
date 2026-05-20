@@ -56,7 +56,7 @@ class HubApiClient(BaseApiClient):
             "/api/hub/internal",
             json_data=body,
             token="",
-            headers={"x-hub-token": self.config.effective_hub_token},
+            query={"token": self.config.effective_hub_token},
         )
 
     async def get_hub(self, hub_id: str | None = None) -> dict[str, Any]:
