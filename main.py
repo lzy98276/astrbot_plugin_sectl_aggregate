@@ -396,7 +396,7 @@ class EchoCavePlugin(Star):
                 title,
                 description,
                 author_id=sectl_user_id,
-                author_name=user_id,
+                author_name=sectl_user_id,
                 image_data=image_data,
                 image_filename=image_filename,
             )
@@ -435,7 +435,7 @@ class EchoCavePlugin(Star):
                 pending["title"],
                 pending["description"],
                 author_id=pending["sectl_user_id"],
-                author_name=user_id,
+                author_name=pending["sectl_user_id"],
                 image_data=image_data,
                 image_filename=image_filename,
             )
