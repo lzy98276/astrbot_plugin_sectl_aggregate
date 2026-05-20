@@ -305,10 +305,8 @@ class EchoCavePlugin(Star):
             yield event.plain_result("Hub 服务暂时没有回应，请稍后再试。")
 
     async def on_message(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """处理非指令消息：检测图片+待提交则自动完成投稿。"""
-        command_text = _normalize_command(event.message_str)
-        if command_text:
-            return
+        """处理非指令消息：检测待提交用户的下一条消息。
+        有图片则自动完成投稿，无图片（纯文字）则自动取消，60秒超时。"""
         user_id = _get_user_id(event)
         if not PENDING_HUB_SUBMISSIONS.get(user_id):
             return
@@ -417,40 +415,40 @@ class EchoCavePlugin(Star):
                 "timestamp": time.time(),
             }
             yield event.plain_result(
-                "已保存标题和说明。请发送 hub（带图片）来完成投稿"
+                "已保存标题和说明。请在60秒内发送图片来自动完成投稿，发送文字将自动取消。"
             )
 
     async def _try_complete_pending(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """检查待提交状态，若有待提交+图片则自动完成投稿。"""
+        """处理待提交：有图片→完成，无图片→自动取消，超时60秒→取消。"""
         user_id = _get_user_id(event)
         pending = PENDING_HUB_SUBMISSIONS.pop(user_id, None)
         if not pending:
-            yield event.plain_result("没有待投稿的内容，请先发送：hub 投稿 [标题] | [描述]")
             return
         ts = pending.get("timestamp", 0)
-        if time.time() - ts > 120:
-            yield event.plain_result("待投稿内容已超时（120秒），请重新发送：hub 投稿 [标题] | [描述]")
+        if time.time() - ts > 60:
+            yield event.plain_result("投稿已超时（60秒），已自动取消。请重新发送：hub 投稿 [标题] | [描述]")
             return
         image_data, image_filename = await _extract_image_base64(event)
-        if not image_data:
-            PENDING_HUB_SUBMISSIONS[user_id] = pending
-            yield event.plain_result("未检测到图片，请附带图片后重试：hub（带图片）")
-            return
-        yield event.plain_result("正在投稿（含图片），请稍候...")
-        response = await self.hub_api.create_hub(
-            pending["title"],
-            pending["description"],
-            author_id=pending["sectl_user_id"],
-            image_data=image_data,
-            image_filename=image_filename,
-        )
-        hub_id = (
-            _extract_response_value(
-                response, "sequence_number", "document_id", "id"
+        if image_data:
+            yield event.plain_result("正在投稿（含图片），请稍候...")
+            response = await self.hub_api.create_hub(
+                pending["title"],
+                pending["description"],
+                author_id=pending["sectl_user_id"],
+                author_name=user_id,
+                image_data=image_data,
+                image_filename=image_filename,
             )
-            or "新内容"
-        )
-        yield event.plain_result(f"Hub 投稿成功，编号：{hub_id}（含图片）")
+            hub_id = (
+                _extract_response_value(
+                    response, "sequence_number", "document_id", "id"
+                )
+                or "新内容"
+            )
+            yield event.plain_result(f"Hub 投稿成功，编号：{hub_id}（含图片）")
+        else:
+            yield event.plain_result("投稿已取消（未检测到图片）。")
+            return
 
     async def _handle_hub_view(self, event: AstrMessageEvent, rest: str):
         """处理 Hub 查看（随机/最新/编号），最多返回 1 条并附带图片。"""
