@@ -72,29 +72,44 @@ async def _extract_image_base64(event: AstrMessageEvent) -> tuple[str | None, st
     message = getattr(message_obj, "message", None)
     if not message:
         return None, None
+    log_hint = []
     try:
         for comp in message:
-            if isinstance(comp, Image):
-                file_attr = getattr(comp, "file", None) or getattr(comp, "url", None)
-                if not file_attr:
-                    continue
-                if file_attr.startswith(("http://", "https://")):
-                    import aiohttp
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(
-                            file_attr, timeout=aiohttp.ClientTimeout(total=30)
-                        ) as resp:
-                            if resp.status != 200:
-                                continue
-                            data = await resp.read()
-                else:
-                    with open(file_attr, "rb") as f:
-                        data = f.read()
-                ext = _detect_image_ext(data)
-                encoded = base64.b64encode(data).decode("utf-8")
-                return f"data:image/{ext};base64,{encoded}", f"hub_upload.{ext}"
+            comp_type = type(comp).__name__
+            log_hint.append(comp_type)
+            # 按实际类型名判断，不依赖 import 的类引用
+            is_image = comp_type == "Image"
+            if not is_image:
+                # 补充检查：带 file 属性且看起来是图片路径/URL
+                file_attr = getattr(comp, "file", None) or getattr(comp, "url", None) or ""
+                if isinstance(file_attr, str) and (
+                    file_attr.startswith(("http://", "https://"))
+                    or file_attr.startswith(("/", "\\"))
+                    or file_attr.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))
+                ):
+                    is_image = True
+            if not is_image:
+                continue
+            file_attr = getattr(comp, "file", None) or getattr(comp, "url", None)
+            if not file_attr:
+                continue
+            if file_attr.startswith(("http://", "https://")):
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        file_attr, timeout=aiohttp.ClientTimeout(total=30)
+                    ) as resp:
+                        if resp.status != 200:
+                            continue
+                        data = await resp.read()
+            else:
+                with open(file_attr, "rb") as f:
+                    data = f.read()
+            ext = _detect_image_ext(data)
+            encoded = base64.b64encode(data).decode("utf-8")
+            return f"data:image/{ext};base64,{encoded}", f"hub_upload.{ext}"
     except Exception as exc:
-        logger.warning(f"提取消息图片失败：{exc}")
+        logger.warning(f"提取消息图片失败，消息组件：{log_hint}，错误：{exc}")
     return None, None
 
 
@@ -281,6 +296,17 @@ class EchoCavePlugin(Star):
         except Exception as error:
             logger.exception(f"Hub 指令处理异常：{error}")
             yield event.plain_result("Hub 服务暂时没有回应，请稍后再试。")
+
+    async def on_message(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """处理非指令消息：检测图片+待提交则自动完成投稿。"""
+        command_text = _normalize_command(event.message_str)
+        if command_text:
+            return
+        user_id = _get_user_id(event)
+        if not PENDING_HUB_SUBMISSIONS.get(user_id):
+            return
+        async for _ in self._try_complete_pending(event):
+            yield _
 
     async def _download_image(self, url: str) -> str | None:
         """下载图片到临时文件，返回文件路径。"""
