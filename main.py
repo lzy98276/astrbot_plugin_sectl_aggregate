@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # 确保插件目录在 sys.path 中，使 api/、config 等模块可被导入
@@ -24,7 +25,7 @@ from api.echo_cave import EchoCaveApiClient
 from api.hub import HubApiClient
 from api.qq_binding import QqBindingApiClient
 from config import EchoCaveConfig
-from renderer import HtmlTemplateRenderer, _format_time
+from renderer import HtmlTemplateRenderer
 from state import AuthStateManager
 
 MAX_BATCH_LIMIT = 30
@@ -32,6 +33,15 @@ MERGE_FORWARD_THRESHOLD = 3
 VIEW_MODE_ALIASES = {"最新": "最新", "随机": "随机", "latest": "最新", "random": "随机"}
 PENDING_HUB_SUBMISSIONS: dict[str, dict] = {}
 
+
+
+def _format_time(iso_str: str) -> str:
+    """将 ISO 8601 时间格式化为标准可读格式。"""
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return iso_str
 
 
 def _detect_image_ext(data: bytes) -> str:
