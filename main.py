@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # 确保插件目录在 sys.path 中，使 api/、config 等模块可被导入
 _plugin_dir = Path(__file__).parent

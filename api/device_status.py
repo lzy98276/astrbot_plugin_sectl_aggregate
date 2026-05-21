@@ -56,7 +56,7 @@ def format_device_status(data: dict[str, Any]) -> str:
     DEVICE_ICONS = {"computer": "🖥️", "phone": "📱", "tablet": "📟"}
     lines = ["📡 黎泽懿的设备状态", ""]
 
-    for device_key in ("computer", "phone", "tablet"):
+    for device_key in ("phone", "tablet", "computer"):
         device = data.get(device_key, {})
         if not isinstance(device, dict):
             continue
