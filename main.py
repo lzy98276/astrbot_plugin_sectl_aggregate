@@ -533,6 +533,11 @@ class EchoCavePlugin(Star):
         if not await self._ensure_bound(event):
             yield event.plain_result("编辑前请先完成 QQ 绑定：绑定 [临时Key]")
             return
+        bound = self.auth_state.get_bound(user_id)
+        sectl_user_id = (bound or {}).get("sectl_user_id", "") if bound else ""
+        if not sectl_user_id:
+            yield event.plain_result("未找到绑定的思拓创联账号信息，请重新绑定。")
+            return
         parts = remaining.split("|", 1)
         title = parts[0].strip()
         description = parts[1].strip() if len(parts) > 1 else ""
@@ -541,9 +546,16 @@ class EchoCavePlugin(Star):
         if not hub_doc or not hub_doc.get("document_id"):
             yield event.plain_result(f"未找到编号为 {hub_id} 的 Hub 内容。")
             return
+        if hub_doc.get("author_id", "") != sectl_user_id:
+            yield event.plain_result("只能编辑自己发布的 Hub 内容。")
+            return
+        image_data, image_filename = await _extract_image_base64(event)
         yield event.plain_result("正在更新，请稍候...")
-        await self.hub_api.update_hub(hub_doc["document_id"], title, description)
-        yield event.plain_result(f"Hub #{hub_id} 已更新。")
+        await self.hub_api.update_hub(
+            hub_doc["document_id"], title, description,
+            image_data=image_data, image_filename=image_filename,
+        )
+        yield event.plain_result(f"Hub #{hub_id} 已更新。" + ("（含图片）" if image_data else ""))
 
     async def _handle_hub_delete(self, event: AstrMessageEvent, hub_id: str):
         hub_id = hub_id.strip()
@@ -554,10 +566,18 @@ class EchoCavePlugin(Star):
         if not await self._ensure_bound(event):
             yield event.plain_result("删除前请先完成 QQ 绑定：绑定 [临时Key]")
             return
+        bound = self.auth_state.get_bound(user_id)
+        sectl_user_id = (bound or {}).get("sectl_user_id", "") if bound else ""
+        if not sectl_user_id:
+            yield event.plain_result("未找到绑定的思拓创联账号信息，请重新绑定。")
+            return
         yield event.plain_result("正在查询 Hub 内容，请稍候...")
         hub_doc = await self.hub_api.get_hub_by_sequence(hub_id)
         if not hub_doc or not hub_doc.get("document_id"):
             yield event.plain_result(f"未找到编号为 {hub_id} 的 Hub 内容。")
+            return
+        if hub_doc.get("author_id", "") != sectl_user_id:
+            yield event.plain_result("只能删除自己发布的 Hub 内容。")
             return
         yield event.plain_result("正在删除，请稍候...")
         await self.hub_api.delete_hub(hub_doc["document_id"])

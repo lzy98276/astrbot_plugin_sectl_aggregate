@@ -141,6 +141,8 @@ class HubApiClient(BaseApiClient):
         *,
         author_id: str | None = None,
         tags: list[str] | None = None,
+        image_data: str | None = None,
+        image_filename: str | None = None,
     ) -> dict[str, Any]:
         """更新 Hub 内容（内部 API）。"""
         body: dict[str, Any] = {
@@ -150,6 +152,10 @@ class HubApiClient(BaseApiClient):
         }
         if tags:
             body["tags"] = tags
+        if image_data:
+            body["image_data"] = image_data
+        if image_filename:
+            body["image_filename"] = image_filename
         return await self.request(
             "PUT",
             "/api/hub/internal",
