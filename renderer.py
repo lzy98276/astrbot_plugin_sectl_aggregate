@@ -115,7 +115,7 @@ class Renderer:
             "  QQ 绑定       绑定思拓创联账号",
             "",
             "作者：黎泽懿_Aionflux",
-            "数据：aionflux.cn / sectl.cn",
+            "数据：sectl.cn / aionflux.cn",
         ])
 
 
