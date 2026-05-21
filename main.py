@@ -148,13 +148,19 @@ class EchoCavePlugin(Star):
             logger.warning(f"根菜单纯文本渲染失败，使用硬编码降级：{error}")
             fallback = (
                 "📣 黎悠看板娘指令菜单\r\n"
-                "/help：查看帮助菜单\r\n"
-                "/回声洞 帮助：查看回声洞帮助菜单\r\n"
-                "/hub 帮助：查看 Hub 内容中心帮助菜单\r\n"
-                "/spy：查看黎泽懿_Aionflux 三设备实时状态\r\n"
-                "/绑定 [临时Key]：使用 Key 完成 QQ 绑定\r\n"
-                "/解绑：解绑当前 QQ 账号\r\n"
-                "/绑定状态：查看绑定状态"
+                "\r\n"
+                "📖 帮助\r\n"
+                "  /help              查看帮助菜单\r\n"
+                "\r\n"
+                "🚀 功能\r\n"
+                "  /回声洞 帮助        回声洞社区投稿/查看\r\n"
+                "  /hub 帮助           Hub 内容中心投稿/查看\r\n"
+                "  /spy               黎泽懿设备实时状态\r\n"
+                "\r\n"
+                "🔐 账号\r\n"
+                "  /绑定 [临时Key]    完成 QQ 绑定\r\n"
+                "  /解绑              解绑当前 QQ 账号\r\n"
+                "  /绑定状态           查看 QQ 绑定状态"
             )
         yield event.plain_result(fallback)
 
