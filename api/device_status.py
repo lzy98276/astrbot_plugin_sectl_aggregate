@@ -50,11 +50,11 @@ async def fetch_device_status(timeout: float = 10.0) -> dict[str, Any]:
 
 
 def format_device_status(data: dict[str, Any]) -> str:
-    """将设备状态原始数据格式化为纯文本。"""
     if not data or not isinstance(data, dict):
         return "暂时无法获取设备状态数据。"
 
-    lines = ["📡 实时设备状态", "━━━━━━━━━━━━━━", ""]
+    DEVICE_ICONS = {"computer": "🖥️", "phone": "📱", "tablet": "📟"}
+    lines = ["📡 黎泽懿的设备状态", ""]
 
     for device_key in ("computer", "phone", "tablet"):
         device = data.get(device_key, {})
@@ -62,15 +62,20 @@ def format_device_status(data: dict[str, Any]) -> str:
             continue
 
         label = DEVICE_LABELS.get(device_key, device_key)
+        icon = DEVICE_ICONS.get(device_key, "💻")
         online = device.get("online", False)
         status_icon = "🟢" if online else "🔴"
         status_text = "在线" if online else "离线"
 
-        lines.append(f"── {label} {status_icon} {status_text} ──")
+        lines.append(f"{icon} {status_icon} {label} ({status_text})")
 
-        app = device.get("app", "") or ""
-        if online and app:
-            lines.append(f"  应用：{app}")
+        if online:
+            app = device.get("app", "") or ""
+            if app:
+                lines.append(f"  应用     {app}")
+            conn_type = device.get("connectionType", "") or ""
+            if conn_type:
+                lines.append(f"  连接     {conn_type}")
 
         battery = device.get("battery")
         if battery is not None:
@@ -78,28 +83,28 @@ def format_device_status(data: dict[str, Any]) -> str:
             battery_text = f"{battery}%"
             if charging:
                 battery_text += " 🔌 充电中"
-            lines.append(f"  电量：{battery_text}")
+            lines.append(f"  电量     {battery_text}")
 
         network = device.get("network", "") or ""
         if network:
-            lines.append(f"  网络：{network}")
+            lines.append(f"  网络     {network}")
 
         last_update = device.get("lastUpdate", "") or ""
         if last_update:
-            formatted = _format_time(last_update)
-            lines.append(f"  最近上报：{formatted}")
+            lines.append(f"  上报     {_format_time_short(last_update)}")
 
         lines.append("")
 
+    lines.append("数据来源：aionflux.cn")
     return "\r\n".join(lines).strip()
 
 
-def _format_time(iso_str: str) -> str:
+def _format_time_short(iso_str: str) -> str:
     from datetime import datetime, timedelta, timezone
 
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         dt = dt.replace(tzinfo=None) + timedelta(hours=8)
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
+        return dt.strftime("%m-%d %H:%M")
     except Exception:
         return iso_str
