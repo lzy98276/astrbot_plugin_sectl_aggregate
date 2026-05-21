@@ -21,6 +21,7 @@ from astrbot.api.star import Context, Star, register
 from astrbot.api.message_components import Image, Node, Nodes, Plain
 
 from api.base import EchoCaveApiError
+from api.device_status import DeviceStatusError, fetch_device_status
 from api.echo_cave import EchoCaveApiClient
 from api.hub import HubApiClient
 from api.qq_binding import QqBindingApiClient
@@ -150,6 +151,7 @@ class EchoCavePlugin(Star):
                 "/help：查看帮助菜单\r\n"
                 "/回声洞 帮助：查看回声洞帮助菜单\r\n"
                 "/hub 帮助：查看 Hub 内容中心帮助菜单\r\n"
+                "/spy：查看黎泽懿_Aionflux 三设备实时状态\r\n"
                 "/绑定 [临时Key]：使用 Key 完成 QQ 绑定\r\n"
                 "/解绑：解绑当前 QQ 账号\r\n"
                 "/绑定状态：查看绑定状态"
@@ -291,6 +293,30 @@ class EchoCavePlugin(Star):
         except Exception as error:
             logger.exception(f"Hub 指令处理异常：{error}")
             yield event.plain_result("Hub 服务暂时没有回应，请稍后再试。")
+
+    @filter.command("spy")
+    async def device_status(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """查看黎泽懿_Aionflux 三设备实时状态（电脑/手机/平板）"""
+        yield event.plain_result("正在查询设备状态，请稍候...")
+        try:
+            data = await fetch_device_status(timeout=10.0)
+        except DeviceStatusError as error:
+            logger.warning(f"设备状态 API 调用失败：{error}")
+            yield event.plain_result("暂时无法获取设备状态，请稍后重试。")
+            return
+        except Exception as error:
+            logger.exception(f"设备状态请求异常：{error}")
+            yield event.plain_result("设备状态服务暂时不可用，请稍后再试。")
+            return
+        try:
+            html = self.renderer.render_device_status(data)
+        except Exception as error:
+            logger.warning(f"设备状态 HTML 渲染失败，使用纯文本降级：{error}")
+            yield event.plain_result(self.renderer.render_device_status_text(data))
+            return
+        yield await self._html_result(
+            event, html, self.renderer.render_device_status_text(data)
+        )
 
     async def on_message(self, event: AstrMessageEvent) -> AsyncGenerator:
         """处理非指令消息（Hub 已取消二段式投稿，暂保留方法供扩展）。"""

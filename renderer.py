@@ -31,6 +31,7 @@ class HtmlTemplateRenderer:
             {"name": "/help", "desc": "查看帮助菜单"},
             {"name": "/回声洞 帮助", "desc": "查看回声洞专属帮助菜单"},
             {"name": "/hub 帮助", "desc": "查看 Hub 内容中心帮助菜单"},
+            {"name": "/spy", "desc": "查看黎泽懿_Aionflux 三设备实时状态"},
             {"name": "/绑定 [临时Key]", "desc": "使用 Key 完成 QQ 绑定"},
             {"name": "/解绑", "desc": "解绑当前 QQ 账号"},
             {"name": "/绑定状态", "desc": "查看当前账号 QQ 绑定状态"},
@@ -85,6 +86,7 @@ class HtmlTemplateRenderer:
                 "/help：查看帮助菜单",
                 "/回声洞 帮助：查看回声洞帮助菜单",
                 "/hub 帮助：查看 Hub 内容中心帮助菜单",
+                "/spy：查看黎泽懿_Aionflux 三设备实时状态",
                 "/绑定 [临时Key]：使用 Key 完成 QQ 绑定",
                 "/解绑：解绑当前 QQ 账号",
                 "/绑定状态：查看绑定状态",
@@ -175,6 +177,62 @@ class HtmlTemplateRenderer:
             lines.append(time_str)
         lines.append(f"浏览量：{hub_data.get('views', 0)}")
         return "\r\n".join(lines)
+
+    def render_device_status(self, data: dict[str, Any]) -> str:
+        """渲染设备状态展示 HTML。"""
+        DEVICE_ICONS = {"computer": "🖥️", "phone": "📱", "tablet": "📟"}
+        DEVICE_LABELS = {"computer": "电脑", "phone": "手机", "tablet": "平板"}
+
+        slots = ""
+        for key in ("computer", "phone", "tablet"):
+            dev = data.get(key, {})
+            if not isinstance(dev, dict):
+                continue
+            online = dev.get("online", False)
+            badge = "status-online" if online else "status-offline"
+            badge_text = "🟢 在线" if online else "🔴 离线"
+            app = html.escape(dev.get("app", "") or "未检测到应用信息")
+            battery = dev.get("battery")
+            charging = dev.get("charging", False)
+            battery_text = f"{battery}%" if battery is not None else "--"
+            if battery is not None and charging:
+                battery_text += " 🔌 充电中"
+            network = html.escape(dev.get("network", "") or "--")
+            last_update = dev.get("lastUpdate", "") or ""
+            time_str = _format_time(last_update) if last_update else "暂无数据"
+
+            slots += f"""
+            <div class="device-card">
+                <div class="device-header">
+                    <span class="device-icon">{DEVICE_ICONS.get(key, "💻")}</span>
+                    <span class="device-name">{DEVICE_LABELS.get(key, key)}</span>
+                    <span class="{badge}">{badge_text}</span>
+                </div>
+                <div class="device-detail">
+                    <div class="detail-row">
+                        <span class="detail-label">当前应用</span>
+                        <span class="detail-value">{app}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">电量</span>
+                        <span class="detail-value">{battery_text}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">网络</span>
+                        <span class="detail-value">{network}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">最近上报</span>
+                        <span class="detail-value">{time_str}</span>
+                    </div>
+                </div>
+            </div>"""
+
+        return self._render("device_status.html", {"device_slots": slots})
+
+    def render_device_status_text(self, data: dict[str, Any]) -> str:
+        from api.device_status import format_device_status
+        return format_device_status(data)
 
     def render_menu_text(self) -> str:
         """生成回声洞纯文本菜单，作为图片能力不可用时的降级输出。"""
