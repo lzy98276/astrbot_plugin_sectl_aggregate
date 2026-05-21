@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 # 确保插件目录在 sys.path 中，使 api/、config 等模块可被导入
 _plugin_dir = Path(__file__).parent
@@ -133,7 +132,7 @@ class EchoCavePlugin(Star):
         self.hub_api = HubApiClient(self.config)
         self.binding_api = QqBindingApiClient(self.config)
         self.auth_state = AuthStateManager()
-        self.renderer = HtmlTemplateRenderer(Path(__file__).parent / "templates")
+        self.renderer = HtmlTemplateRenderer()
 
     async def initialize(self):
         """插件初始化时记录当前 API 地址，便于排查部署配置。"""
@@ -156,14 +155,7 @@ class EchoCavePlugin(Star):
                 "/解绑：解绑当前 QQ 账号\r\n"
                 "/绑定状态：查看绑定状态"
             )
-        try:
-            html = self.renderer.render_root_menu()
-        except Exception as error:
-            logger.warning(f"帮助菜单 HTML 模板渲染失败，使用纯文本降级：{error}")
-            yield event.plain_result(fallback)
-            return
-        # _html_result 内部已有完善的 try/except 降级到纯文本
-        yield await self._html_result(event, html, fallback)
+        yield event.plain_result(fallback)
 
     @filter.command("回声洞")
     async def echo_cave(self, event: AstrMessageEvent) -> AsyncGenerator:
@@ -172,9 +164,7 @@ class EchoCavePlugin(Star):
         action, rest = _split_action(command_text)
         try:
             if action in ("", "help", "帮助", "菜单"):
-                yield await self._html_result(
-                    event, self.renderer.render_menu(), self.renderer.render_menu_text()
-                )
+                yield event.plain_result(self.renderer.render_menu_text())
                 return
             if action == "投稿":
                 async for _ in self._handle_create(event, rest):
@@ -262,9 +252,7 @@ class EchoCavePlugin(Star):
         action, rest = _split_hub_action(command_text)
         try:
             if action in ("", "help", "帮助", "菜单"):
-                yield await self._html_result(
-                    event, self.renderer.render_hub_menu(), self.renderer.render_hub_menu_text()
-                )
+                yield event.plain_result(self.renderer.render_hub_menu_text())
                 return
             if action == "投稿":
                 async for _ in self._handle_hub_create(event, rest):
@@ -297,7 +285,7 @@ class EchoCavePlugin(Star):
     @filter.command("spy")
     async def device_status(self, event: AstrMessageEvent) -> AsyncGenerator:
         """查看黎泽懿_Aionflux 三设备实时状态（电脑/手机/平板）"""
-        yield event.plain_result("正在查询设备状态，请稍候...")
+        yield event.plain_result("正在查询黎泽懿的设备状态...")
         try:
             data = await fetch_device_status(timeout=10.0)
         except DeviceStatusError as error:
@@ -308,15 +296,7 @@ class EchoCavePlugin(Star):
             logger.exception(f"设备状态请求异常：{error}")
             yield event.plain_result("设备状态服务暂时不可用，请稍后再试。")
             return
-        try:
-            html = self.renderer.render_device_status(data)
-        except Exception as error:
-            logger.warning(f"设备状态 HTML 渲染失败，使用纯文本降级：{error}")
-            yield event.plain_result(self.renderer.render_device_status_text(data))
-            return
-        yield await self._html_result(
-            event, html, self.renderer.render_device_status_text(data)
-        )
+        yield event.plain_result(self.renderer.render_device_status_text(data))
 
     async def on_message(self, event: AstrMessageEvent) -> AsyncGenerator:
         """处理非指令消息（Hub 已取消二段式投稿，暂保留方法供扩展）。"""
@@ -627,11 +607,7 @@ class EchoCavePlugin(Star):
         if not response:
             yield event.plain_result("未找到回声洞。")
             return
-        yield await self._html_result(
-            event,
-            self.renderer.render_echo(response),
-            self.renderer.render_echo_text(response),
-        )
+        yield event.plain_result(self.renderer.render_echo_text(response))
 
     async def _view_random_batch(self, event: AstrMessageEvent, count: int):
         """批量随机查看多条回声洞。"""
@@ -670,11 +646,7 @@ class EchoCavePlugin(Star):
         if not response:
             yield event.plain_result(f"未找到编号为 {echo_id} 的回声洞。")
             return
-        yield await self._html_result(
-            event,
-            self.renderer.render_echo(response),
-            self.renderer.render_echo_text(response),
-        )
+        yield event.plain_result(self.renderer.render_echo_text(response))
 
     async def _view_latest(self, event: AstrMessageEvent, count: int):
         count = min(count, MAX_BATCH_LIMIT)
@@ -716,24 +688,6 @@ class EchoCavePlugin(Star):
                 lines.append(f"   时间：{echo['created_at']}")
                 lines.append("")
             yield event.plain_result("\r\n".join(lines))
-
-    async def _html_result(
-        self, event: AstrMessageEvent, html_content: str, fallback_text: str
-    ):
-        """优先使用 AstrBot HTML 渲染图片，失败时降级为纯文本。"""
-        try:
-            import asyncio
-            image_url = await asyncio.wait_for(
-                self.html_render(html_content, data={}, options={"full_page": True}),
-                timeout=3.0,
-            )
-            return event.image_result(image_url)
-        except asyncio.TimeoutError:
-            logger.warning("HTML 渲染超时，改用纯文本。")
-            return event.plain_result(fallback_text)
-        except Exception as error:
-            logger.warning(f"HTML 图片结果生成失败，改用纯文本：{error}")
-            return event.plain_result(fallback_text)
 
     async def _handle_update(self, event: AstrMessageEvent, rest: str):
         echo_id, content = _split_first(rest)
