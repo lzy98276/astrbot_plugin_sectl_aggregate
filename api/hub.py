@@ -152,9 +152,10 @@ class HubApiClient(BaseApiClient):
             body["tags"] = tags
         return await self.request(
             "PUT",
-            "/api/hub",
+            "/api/hub/internal",
             json_data=body,
-            token=self.config.api_token or None,
+            token="",
+            query={"token": self.config.effective_hub_token},
         )
 
     async def delete_hub(
@@ -166,9 +167,10 @@ class HubApiClient(BaseApiClient):
             body["author_id"] = author_id
         return await self.request(
             "DELETE",
-            "/api/hub",
+            "/api/hub/internal",
             json_data=body,
-            token=self.config.api_token or None,
+            token="",
+            query={"token": self.config.effective_hub_token},
         )
 
 
