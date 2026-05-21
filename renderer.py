@@ -111,7 +111,7 @@ class HtmlTemplateRenderer:
         commands = [
             {
                 "name": "/hub 投稿 [标题] | [描述]",
-                "desc": "投稿 Hub（带图直接提交，无图则等待，60秒内发图片自动完成，发文字自动取消），需先绑定 QQ",
+                "desc": "投稿 Hub（需要附带图片），需先绑定 QQ",
             },
             {"name": "/hub 查看 [编号]", "desc": "按编号查看单条 Hub 内容（附带图片）"},
             {"name": "/hub 查看 随机", "desc": "随机查看一条 Hub 内容（附带图片）"},
@@ -119,7 +119,6 @@ class HtmlTemplateRenderer:
             {"name": "/hub 标签", "desc": "查看可用标签列表"},
             {"name": "/hub 编辑 [编号] [新标题] | [新描述]", "desc": "编辑自己的 Hub 内容（可同时更换图片）"},
             {"name": "/hub 删除 [编号]", "desc": "删除自己的 Hub 内容"},
-            {"name": "/hub 投稿取消", "desc": "取消待提交的 Hub 投稿"},
         ]
         items = "".join(
             f"<li><strong>{html.escape(item['name'])}</strong><span>{html.escape(item['desc'])}</span></li>"
@@ -132,8 +131,7 @@ class HtmlTemplateRenderer:
         return "\r\n".join(
             [
                 "📣 Hub 内容中心指令列表",
-                "/hub 投稿 [标题] | [描述]：投稿 Hub（带图直接提交，无图则等待60秒内发送图片自动完成，发文字自动取消），需绑定 QQ",
-                "/hub 投稿取消：取消待提交的投稿",
+                "/hub 投稿 [标题] | [描述]：投稿 Hub（需要附带图片），需绑定 QQ",
                 "/hub 查看 [编号]：按编号查看（附带图片）",
                 "/hub 查看 随机：随机查看一条（附带图片）",
                 "/hub 查看 最新：查看最新一条（附带图片）",
