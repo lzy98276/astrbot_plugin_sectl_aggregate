@@ -5,8 +5,6 @@ import sys
 import types
 import unittest
 from unittest.mock import patch
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 astrbot_module = types.ModuleType("astrbot")
 astrbot_api_module = types.ModuleType("astrbot.api")
@@ -47,7 +45,7 @@ from main import (
     _parse_limit,
     _split_action,
 )
-from renderer import HtmlTemplateRenderer
+from renderer import Renderer
 from state import AuthStateManager
 
 
@@ -149,16 +147,8 @@ class CoreLogicTest(unittest.TestCase):
 
     def test_renderer_uses_standalone_binding_commands(self):
         """校验根目录菜单包含独立 help 和绑定指令，不包含旧写法。"""
-        with TemporaryDirectory() as temp_dir:
-            template_dir = Path(temp_dir) / "templates"
-            template_dir.mkdir()
-            (template_dir / "menu.html").write_text("$commands", encoding="utf-8")
-            (template_dir / "echo_display.html").write_text(
-                "$content", encoding="utf-8"
-            )
-            renderer = HtmlTemplateRenderer(template_dir)
-
-            root_menu = renderer.render_root_menu_text()
+        renderer = Renderer()
+        root_menu = renderer.render_root_menu_text()
 
         self.assertIn("黎悠看板娘指令菜单", root_menu)
         self.assertIn("绑定 [临时Key]", root_menu)
@@ -169,16 +159,8 @@ class CoreLogicTest(unittest.TestCase):
 
     def test_renderer_echo_cave_menu_separates_commands(self):
         """校验回声洞菜单仅包含带回声洞前缀的指令。"""
-        with TemporaryDirectory() as temp_dir:
-            template_dir = Path(temp_dir) / "templates"
-            template_dir.mkdir()
-            (template_dir / "menu.html").write_text("$commands", encoding="utf-8")
-            (template_dir / "echo_display.html").write_text(
-                "$content", encoding="utf-8"
-            )
-            renderer = HtmlTemplateRenderer(template_dir)
-
-            cave_menu = renderer.render_menu_text()
+        renderer = Renderer()
+        cave_menu = renderer.render_menu_text()
 
         self.assertIn("回声洞指令菜单", cave_menu)
         self.assertIn("回声洞 投稿 [内容]", cave_menu)
@@ -237,23 +219,14 @@ class CoreLogicTest(unittest.TestCase):
         with patch("state.time", return_value=102.0):
             self.assertIsNone(manager.get_pending("user-1"))
 
-    def test_renderer_escapes_echo_content(self):
-        """校验回声洞模板渲染会转义用户内容，避免注入 HTML。"""
-        with TemporaryDirectory() as temp_dir:
-            template_dir = Path(temp_dir) / "templates"
-            template_dir.mkdir()
-            (template_dir / "menu.html").write_text("$commands", encoding="utf-8")
-            (template_dir / "echo_display.html").write_text(
-                "$echo_id|$content|$author|$created_at", encoding="utf-8"
-            )
-            renderer = HtmlTemplateRenderer(template_dir)
-
-            html = renderer.render_echo(
-                {"data": {"id": 7, "content": "<b>洞</b>\n新行", "user_id": "u"}}
-            )
-
-        self.assertIn("&lt;b&gt;洞&lt;/b&gt;<br>新行", html)
-        self.assertNotIn("<b>洞</b>", html)
+    def test_renderer_echo_text_output(self):
+        """校验回声洞文本渲染正确展示内容。"""
+        renderer = Renderer()
+        text = renderer.render_echo_text(
+            {"data": {"id": 7, "content": "测试内容", "user_id": "u"}}
+        )
+        self.assertIn("回声洞 #7", text)
+        self.assertIn("测试内容", text)
 
     def test_parse_limit_extracts_count(self):
         """校验查看指令数量解析，上限 MAX_BATCH_LIMIT。"""

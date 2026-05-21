@@ -73,9 +73,6 @@ def format_device_status(data: dict[str, Any]) -> str:
             app = device.get("app", "") or ""
             if app:
                 lines.append(f"  应用     {app}")
-            conn_type = device.get("connectionType", "") or ""
-            if conn_type:
-                lines.append(f"  连接     {conn_type}")
 
         battery = device.get("battery")
         if battery is not None:

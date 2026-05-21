@@ -26,7 +26,7 @@ from api.echo_cave import EchoCaveApiClient
 from api.hub import HubApiClient
 from api.qq_binding import QqBindingApiClient
 from config import EchoCaveConfig
-from renderer import HtmlTemplateRenderer
+from renderer import Renderer
 from state import AuthStateManager
 
 MAX_BATCH_LIMIT = 30
@@ -133,7 +133,7 @@ class EchoCavePlugin(Star):
         self.hub_api = HubApiClient(self.config)
         self.binding_api = QqBindingApiClient(self.config)
         self.auth_state = AuthStateManager()
-        self.renderer = HtmlTemplateRenderer()
+        self.renderer = Renderer()
 
     async def initialize(self):
         """插件初始化时记录当前 API 地址，便于排查部署配置。"""

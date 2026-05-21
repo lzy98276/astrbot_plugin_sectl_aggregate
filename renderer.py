@@ -15,8 +15,8 @@ def _format_time(iso_str: str) -> str:
         return iso_str
 
 
-class HtmlTemplateRenderer:
-    """所有文本渲染方法集中在此，不再生成 HTML/图片。"""
+class Renderer:
+    """所有文本渲染方法集中在此。"""
 
     def render_root_menu_text(self) -> str:
         return "\r\n".join([
