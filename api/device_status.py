@@ -72,7 +72,7 @@ def format_device_status(data: dict[str, Any]) -> str:
         if online:
             app = device.get("app", "") or ""
             if app:
-                lines.append(f"  应用     {app}")
+                lines.append(f"  应用: {app}")
 
         battery = device.get("battery")
         if battery is not None:
@@ -80,15 +80,15 @@ def format_device_status(data: dict[str, Any]) -> str:
             battery_text = f"{battery}%"
             if charging:
                 battery_text += " 🔌 充电中"
-            lines.append(f"  电量     {battery_text}")
+            lines.append(f"  电量: {battery_text}")
 
         network = device.get("network", "") or ""
         if network:
-            lines.append(f"  网络     {network}")
+            lines.append(f"  网络: {network}")
 
         last_update = device.get("lastUpdate", "") or ""
         if last_update:
-            lines.append(f"  上报     {_format_time_short(last_update)}")
+            lines.append(f"  上报: {_format_time_short(last_update)}")
 
         lines.append("")
 
