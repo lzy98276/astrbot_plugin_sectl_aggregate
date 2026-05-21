@@ -23,6 +23,7 @@ class Renderer:
             "📣 黎悠看板娘指令菜单",
             "",
             "📖 帮助",
+            "  /about             关于黎悠",
             "  /help              查看帮助菜单",
             "",
             "🚀 功能",
@@ -101,6 +102,21 @@ class Renderer:
     def render_device_status_text(self, data: dict[str, Any]) -> str:
         from api.device_status import format_device_status
         return format_device_status(data)
+
+    def render_about_text(self) -> str:
+        return "\r\n".join([
+            "📣 黎悠",
+            "思拓创联聚合 v1.0.0",
+            "",
+            "功能",
+            "  回声洞社区    匿名投稿/查看/编辑",
+            "  Hub 内容中心  带图片的内容分享",
+            "  设备监控      黎泽懿三设备实时状态",
+            "  QQ 绑定       绑定思拓创联账号",
+            "",
+            "作者：黎泽懿_Aionflux",
+            "数据：aionflux.cn / sectl.cn",
+        ])
 
 
 def _normalize_echo_data(echo_data: dict[str, Any]) -> dict[str, str]:

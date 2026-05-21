@@ -139,6 +139,11 @@ class EchoCavePlugin(Star):
         """插件初始化时记录当前 API 地址，便于排查部署配置。"""
         logger.info(f"回声洞插件已启动，API 地址：{self.config.api_base_url}")
 
+    @filter.command("about")
+    async def about(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """关于黎悠"""
+        yield event.plain_result(self.renderer.render_about_text())
+
     @filter.command("help")
     async def help_menu(self, event: AstrMessageEvent) -> AsyncGenerator:
         """查看根目录帮助菜单"""
@@ -149,8 +154,9 @@ class EchoCavePlugin(Star):
             fallback = (
                 "📣 黎悠看板娘指令菜单\r\n"
                 "\r\n"
-                "📖 帮助\r\n"
-                "  /help              查看帮助菜单\r\n"
+            "📖 帮助\r\n"
+            "  /about             关于黎悠\r\n"
+            "  /help              查看帮助菜单\r\n"
                 "\r\n"
                 "🚀 功能\r\n"
                 "  /回声洞 帮助        回声洞社区投稿/查看\r\n"
